@@ -1,0 +1,43 @@
+cabal-version: 3.8
+name: purely-functional
+version: 0.1.0.0
+
+common shared
+    ghc-options: -Wall
+    default-language: GHC2024
+    default-extensions:
+        DerivingVia,
+        OverloadedStrings,
+    build-depends:
+        base,
+        comonad,
+        containers,
+        data-fix,
+        free,
+        mtl,
+        optics,
+        recursion-schemes,
+        text,
+        transformers-compat,
+
+library
+    import: shared
+    hs-source-dirs: src
+    exposed-modules:
+        PF.Expr.In
+        PF.Expr.LambdaLifted
+        PF.Expr.Linearised
+        PF.Compile.LambdaLift
+        PF.Compile.Linearise
+
+test-suite purely-functional-test
+    import: shared
+    default-extensions:
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: Main.hs
+    other-modules:
+    build-depends:
+        purely-functional,
+        tasty,
+        tasty-hunit,
