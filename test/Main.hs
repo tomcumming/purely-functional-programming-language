@@ -2,10 +2,8 @@ module Main (main) where
 
 import Control.Category ((>>>))
 import qualified Control.Comonad.Cofree as CF
-import Control.Monad (unless)
-import Control.Monad.State (evalState)
+import Control.Monad (unless, zipWithM_)
 import Data.Bifunctor (bimap)
-import qualified Data.Map as M
 import qualified Data.Map.Merge.Strict as M
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -26,9 +24,8 @@ unify =
     bimap CF.unwrap CF.unwrap >>> \case
       (LL.Local x, LL.Local y) | x == y -> pure ()
       (LL.Global x, LL.Global y) | x == y -> pure ()
-      (LL.Closure c1 x1 b1, LL.Closure c2 x2 b2) -> do
-        unless (x1 == x2) $ report x1 x2
-        unify c1 c2
+      (LL.Closure c1 b1, LL.Closure c2 b2) | length c1 == length c2 -> do
+        zipWithM_ unify c1 c2
         unify b1 b2
       (LL.Ap e11 e12, LL.Ap e21 e22) -> do
         unify e11 e21
@@ -47,7 +44,7 @@ unify =
             bs2
         case (d1, d2) of
           (Nothing, Nothing) -> pure ()
-          (Just (x1, e1'), Just (x2, e2')) | x1 == x2 -> unify e1' e2'
+          (Just e1', Just e2') -> unify e1' e2'
           _ -> report d1 d2
       (e1, e2) -> report e1 e2
   where
@@ -56,102 +53,92 @@ unify =
 testLambdaLifting :: IO ()
 testLambdaLifting = do
   T.putStrLn "Testing lambda lifting..."
-  testLiftingWithoutClosure
-  testLiftingClose1
+
+  testExpected
+    "\\a -> a"
+    (na $ Q.Abs $ na $ Q.Local (toEnum 0))
+    (na $ LL.Closure [] $ lcl 0)
+
+  testExpected
+    "\\a b -> a"
+    (na $ Q.Abs $ na $ Q.Abs $ na $ Q.Local (toEnum 1))
+    ( na $
+        LL.Closure [] $
+          na $
+            LL.Closure [lcl 0] $
+              lcl 1
+    )
+
+  testExpected
+    "\\a b -> b"
+    (na $ Q.Abs $ na $ Q.Abs $ na $ Q.Local (toEnum 0))
+    (na $ LL.Closure [] $ na $ LL.Closure [] $ lcl 0)
+
+  testExpected
+    "\\a b c -> a"
+    (na $ Q.Abs $ na $ Q.Abs $ na $ Q.Abs $ na $ Q.Local (toEnum 2))
+    ( na $
+        LL.Closure [] $
+          na $
+            LL.Closure [lcl 0] $
+              na $
+                LL.Closure [lcl 1] $
+                  lcl 1
+    )
+
+  testExpected
+    "\\a b -> a b"
+    ( na $
+        Q.Abs $
+          na $
+            Q.Abs $
+              na $
+                Q.Ap
+                  (na $ Q.Local (toEnum 1))
+                  (na $ Q.Local (toEnum 0))
+    )
+    ( na $
+        LL.Closure [] $
+          na $
+            LL.Closure [lcl 0] $
+              na $
+                LL.Ap
+                  (lcl 1)
+                  (lcl 0)
+    )
+
+  testExpected
+    "\\a b c -> a b"
+    ( na $
+        Q.Abs $
+          na $
+            Q.Abs $
+              na $
+                Q.Abs $
+                  na $
+                    Q.Ap
+                      (na $ Q.Local (toEnum 2))
+                      (na $ Q.Local (toEnum 1))
+    )
+    ( na $
+        LL.Closure [] $
+          na $
+            LL.Closure [lcl 0] $
+              na $
+                LL.Closure [lcl 1, lcl 0] $
+                  na $
+                    LL.Ap
+                      (lcl 2)
+                      (lcl 1)
+    )
   where
-    testLiftingWithoutClosure :: IO ()
-    testLiftingWithoutClosure = do
-      T.putStr "  Testing lifting without closure... "
-      let inExpr :: CF.Cofree Q.Expr () =
-            na $
-              Q.Abs "x" $
-                na $
-                  Q.Local "x"
-      let outExpr = evalState (lambdaLiftExpr inExpr) (toEnum 0)
-
-      let unit = na $ LL.Global "Unit"
-      let (x0, x1) = (LL.Anon $ toEnum 0, LL.Anon $ toEnum 1)
-      let expected =
-            na $
-              LL.Closure
-                unit
-                x0
-                ( na $
-                    LL.Match
-                      (na $ LL.Local x0)
-                      ( M.singleton
-                          "Pair"
-                          ( [LL.Named "x", x1],
-                            na $
-                              LL.Match
-                                (na $ LL.Local x1)
-                                (M.singleton "Unit" ([], na $ LL.Local $ LL.Named "x"))
-                                Nothing
-                          )
-                      )
-                      Nothing
-                )
+    testExpected name inExpr expected = do
+      T.putStr $ "  Testing " <> name <> "... "
+      let outExpr = lambdaLiftExpr inExpr
       case unify outExpr expected of
         Right () -> T.putStrLn "OK"
         Left err -> do
           T.putStrLn "FAIL"
           T.putStrLn err
 
-    testLiftingClose1 :: IO ()
-    testLiftingClose1 = do
-      T.putStr "  Testing lifting with closure of single... "
-      let inExpr :: CF.Cofree Q.Expr () =
-            na $
-              Q.Abs "x" $
-                na $
-                  Q.Abs "y" $
-                    na $
-                      Q.Local "x"
-      let outExpr = evalState (lambdaLiftExpr inExpr) (toEnum 0)
-
-      let unit = na $ LL.Global "Unit"
-      let [x0, x1, x2] = LL.Anon . toEnum <$> [0, 1, 2]
-      let expected =
-            na $
-              LL.Closure
-                unit
-                x0
-                ( na $
-                    LL.Match
-                      (na $ LL.Local x0)
-                      ( M.singleton
-                          "Pair"
-                          ( [LL.Named "x", x1],
-                            na $
-                              LL.Match
-                                (na $ LL.Local x1)
-                                ( M.singleton
-                                    "Unit"
-                                    ( [],
-                                      na
-                                        $ LL.Closure
-                                          (na $ LL.Local $ LL.Named "x")
-                                          x2
-                                        $ na
-                                        $ LL.Match
-                                          (na $ LL.Local x2)
-                                          ( M.singleton
-                                              "Pair"
-                                              ( [LL.Named "y", LL.Named "x"],
-                                                na $ LL.Local $ LL.Named "x"
-                                              )
-                                          )
-                                          Nothing
-                                    )
-                                )
-                                Nothing
-                          )
-                      )
-                      Nothing
-                )
-
-      case unify outExpr expected of
-        Right () -> T.putStrLn "OK"
-        Left err -> do
-          T.putStrLn "FAIL"
-          T.putStrLn err
+    lcl = na . LL.Local . toEnum
