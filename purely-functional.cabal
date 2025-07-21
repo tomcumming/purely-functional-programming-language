@@ -15,8 +15,7 @@ common shared
         mtl,
         transformers-compat,
         recursion-schemes,
-        free,
-        comonad
+        free
 
 library
     import: shared
