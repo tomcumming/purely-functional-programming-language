@@ -13,6 +13,7 @@ common shared
         text,
         containers,
         mtl,
+        comonad,
         transformers-compat,
         recursion-schemes,
         free
@@ -22,6 +23,7 @@ library
     hs-source-dirs: src
     exposed-modules:
         PFL.Compile.LambdaLift
+        PFL.Compile.Linearise
         PFL.Compile.Qualify
         PFL.Expr.In
         PFL.Expr.Qualified
@@ -31,6 +33,6 @@ test-suite purely-functional-test
     import: shared
     type: exitcode-stdio-1.0
     hs-source-dirs: test
-    main-is: main.hs
+    main-is: Main.hs
     build-depends:
         purely-functional

@@ -1,4 +1,4 @@
-module PFL.Expr.LambdaLifted (Expr (..), Local (..), GenName, free) where
+module PFL.Expr.LambdaLifted (Expr (..), free) where
 
 import Control.Category ((>>>))
 import Control.Comonad.Cofree qualified as CF
@@ -12,25 +12,17 @@ import Data.Set qualified as S
 import Data.Text qualified as T
 import GHC.Generics (Generic1)
 
-newtype GenName = GenName Int
-  deriving newtype (Eq, Ord, Show, Enum)
-
-data Local
-  = Named T.Text
-  | Anon GenName
-  deriving (Eq, Ord, Show)
-
-data Expr a
-  = Local Local
+data Expr l a
+  = Local l
   | Global T.Text
-  | Closure a Local a
+  | Closure a l a
   | Ap a a
   | -- | This also handles a traditional (mono) let
-    Match a (M.Map T.Text ([Local], a)) (Maybe (Local, a))
+    Match a (M.Map T.Text ([l], a)) (Maybe (l, a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
-  deriving (Show1) via FunctorClassesDefault Expr
+  deriving (Show1) via FunctorClassesDefault (Expr l)
 
-free :: CF.Cofree Expr ann -> S.Set Local
+free :: forall ann l. (Ord l) => CF.Cofree (Expr l) ann -> S.Set l
 free =
   cata $
     tailF >>> \case
@@ -43,5 +35,5 @@ free =
           <> foldMap (uncurry S.delete) db
           <> foldMap (uncurry goBranch) bs
   where
-    goBranch :: [Local] -> S.Set Local -> S.Set Local
+    goBranch :: [l] -> S.Set l -> S.Set l
     goBranch xs ys = S.difference ys (S.fromList xs)
