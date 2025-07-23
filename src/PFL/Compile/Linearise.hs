@@ -53,19 +53,13 @@ linearise = \e -> snd $ evalState (cataA go e) (toEnum 0 :: Uid)
         (us2, e2) <- me2
         let f = doCopy ann [us1, us2]
         pure $ f $ ann CF.:< Q.Ap e1 e2
-      (ann CFT.:< Q.Match me mbs mdb) -> do
+      (ann CFT.:< Q.Match me mbs) -> do
         (ue, e) <- me
-        (udb, db) <- case mdb of
-          Nothing -> pure (mempty, Nothing)
-          Just (x, me') -> do
-            (used, e') <- me'
-            (x', (used', e'')) <- goIntro (extract e') x (used, e')
-            pure (used', Just (x', e''))
         (ubs, bs) <- do
           bs' <- traverse (uncurry goMatchBranch) mbs
           pure (fst <$> M.elems bs', snd <$> bs')
-        let f = doCopy ann (ue : udb : ubs)
-        pure $ f $ ann CF.:< Q.Match e bs db
+        let f = doCopy ann (ue : ubs)
+        pure $ f $ ann CF.:< Q.Match e bs
       where
         goIntro :: ann -> T.Text -> ret -> m (Unique, ret)
         goIntro ann x (used, e) = do
@@ -98,8 +92,7 @@ doDrop ann x used e = case used M.!? x of
       ann
         CF.:< Q.Match
           (callDrop ann $ ann CF.:< Q.Local x')
-          (M.singleton "Unit" ([], e))
-          Nothing
+          (M.singleton (Just "Unit") ([], e))
     )
     where
       x' = Unique x (toEnum 0)
@@ -136,8 +129,7 @@ doCopy ann us =
         ann
           CF.:< Q.Match
             (callCopy ann $ ann CF.:< Q.Local x)
-            (M.singleton "Pair" ([x, Unique xx u], e))
-            Nothing
+            (M.singleton (Just "Pair") ([x, Unique xx u], e))
       )
 
 callDrop :: ann -> LExpr ann -> LExpr ann

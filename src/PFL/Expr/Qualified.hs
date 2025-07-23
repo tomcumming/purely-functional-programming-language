@@ -17,7 +17,7 @@ data Expr l a
   | Global T.Text
   | Abs l a
   | Ap a a
-  | Match a (M.Map T.Text ([l], a)) (Maybe (l, a))
+  | Match a (M.Map (Maybe T.Text) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault (Expr l)
 
@@ -27,10 +27,9 @@ free =
     tailF >>> \case
       Local x -> S.singleton x
       Abs x xs -> S.delete x xs
-      Match e bs db ->
+      Match e bs ->
         e
           <> foldMap (uncurry goBranch) bs
-          <> foldMap (uncurry S.delete) db
       e -> fold e
   where
     goBranch :: [l] -> S.Set l -> S.Set l
