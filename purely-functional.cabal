@@ -34,5 +34,6 @@ test-suite purely-functional-test
     type: exitcode-stdio-1.0
     hs-source-dirs: test
     main-is: Main.hs
+    other-modules: Test.Sexp
     build-depends:
         purely-functional
