@@ -17,8 +17,7 @@ data Expr l a
   | Global T.Text
   | Closure a l a
   | Ap a a
-  | -- | This also handles a traditional (mono) let
-    Match a (M.Map T.Text ([l], a)) (Maybe (l, a))
+  | Match a (M.Map (Maybe T.Text) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault (Expr l)
 
@@ -30,10 +29,7 @@ free =
       e@Global {} -> fold e
       Closure ys x zs -> ys <> S.delete x zs
       e@Ap {} -> fold e
-      Match ys bs db ->
-        ys
-          <> foldMap (uncurry S.delete) db
-          <> foldMap (uncurry goBranch) bs
+      Match ys bs -> ys <> foldMap (uncurry goBranch) bs
   where
     goBranch :: [l] -> S.Set l -> S.Set l
     goBranch xs ys = S.difference ys (S.fromList xs)

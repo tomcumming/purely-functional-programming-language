@@ -1,4 +1,11 @@
-module PFL.Compile.Linearise (linearise, Uid (..), Unique (..)) where
+module PFL.Compile.Linearise
+  ( linearise,
+    Uid (..),
+    Unique (..),
+    Linearised,
+    unLinearised,
+  )
+where
 
 import Control.Category ((>>>))
 import Control.Comonad (extract)
@@ -20,6 +27,8 @@ newtype Uid = Uid Int
 data Unique = Unique !T.Text !Uid
   deriving (Eq, Ord, Show)
 
+newtype Linearised ann = Linearised {unLinearised :: LExpr ann}
+
 type QExpr ann = CF.Cofree (Q.Expr T.Text) ann
 
 type LExpr ann = CF.Cofree (Q.Expr Unique) ann
@@ -29,8 +38,8 @@ type LExpr ann = CF.Cofree (Q.Expr Unique) ann
 
 -- | Add drops and copies so every introduced name in the output expression is
 -- used linearly.
-linearise :: forall ann. QExpr ann -> LExpr ann
-linearise = \e -> snd $ evalState (cataA go e) (toEnum 0 :: Uid)
+linearise :: forall ann. QExpr ann -> Linearised ann
+linearise = \e -> Linearised $ snd $ evalState (cataA go e) (toEnum 0 :: Uid)
   where
     fresh :: (MonadState Uid m) => m Uid
     fresh = state $ \n -> (n, succ n)

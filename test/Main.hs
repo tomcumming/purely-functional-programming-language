@@ -10,7 +10,7 @@ import Data.Map qualified as M
 import Data.Map.Merge.Strict qualified as M
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import PFL.Compile.Linearise (Unique (..), linearise)
+import PFL.Compile.Linearise (Unique (..), linearise, unLinearised)
 import PFL.Expr.Qualified qualified as Q
 
 type QExpr = CF.Cofree (Q.Expr T.Text) ()
@@ -94,7 +94,7 @@ testLinearise = do
     doTest :: T.Text -> QExpr -> LExpr -> IO ()
     doTest name inpt expected = do
       T.putStr $ "Testing " <> name <> "... "
-      let outpt = linearise inpt
+      let outpt = unLinearised $ linearise inpt
       case unify outpt expected of
         Right () -> T.putStrLn "OK"
         Left err -> do
