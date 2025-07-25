@@ -115,7 +115,7 @@ instance Into Uid where
 instance Into Unique where
   into (Unique x u) = Lst [into x, into u]
 
-instance (Into l) => Into (CF.Cofree (Q.Expr l) ann) where
+instance (Into g, Into l) => Into (CF.Cofree (Q.Expr g l) ann) where
   into =
     cata $
       tailF >>> \case
@@ -128,7 +128,7 @@ instance (Into l) => Into (CF.Cofree (Q.Expr l) ann) where
       goBranch :: Maybe T.Text -> ([l], Sexp) -> [Sexp]
       goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
 
-instance (Into l) => Into (CF.Cofree (L.Expr l) ann) where
+instance (Into g, Into l) => Into (CF.Cofree (L.Expr g l) ann) where
   into =
     cata $
       tailF >>> \case
@@ -170,10 +170,10 @@ instance From Unique where
     Lst [x, u] -> Unique <$> from x <*> from u
     e -> Left $ "Expected Unique: " <> showText e
 
-instance (From l) => From (CF.Cofree (Q.Expr l) ()) where
+instance (From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
   from = \case
     Lst ["local", e] -> (() CF.:<) . Q.Local <$> from e
-    Lst ["global", Atom x] -> pure $ () CF.:< Q.Global x
+    Lst ["global", e] -> (() CF.:<) . Q.Global <$> from e
     Lst ["abs", e1, e2] -> (() CF.:<) <$> (Q.Abs <$> from e1 <*> from e2)
     Lst ["ap", e1, e2] -> (() CF.:<) <$> (Q.Ap <$> from e1 <*> from e2)
     Lst ["match", e, Lst bs] -> do
@@ -184,7 +184,7 @@ instance (From l) => From (CF.Cofree (Q.Expr l) ()) where
     where
       goBranch ::
         Sexp ->
-        Either T.Text (Maybe T.Text, ([l], CF.Cofree (Q.Expr l) ()))
+        Either T.Text (Maybe T.Text, ([l], CF.Cofree (Q.Expr g l) ()))
       goBranch = \case
         Lst [c, xs, e] -> do
           c' <- from c
@@ -193,10 +193,10 @@ instance (From l) => From (CF.Cofree (Q.Expr l) ()) where
           pure (c', (xs', e'))
         e -> Left $ "Expected match branch: " <> showText e
 
-instance (From l) => From (CF.Cofree (L.Expr l) ()) where
+instance (From g, From l) => From (CF.Cofree (L.Expr g l) ()) where
   from = \case
     Lst ["local", e] -> (() CF.:<) . L.Local <$> from e
-    Lst ["global", Atom x] -> pure $ () CF.:< L.Global x
+    Lst ["global", e] -> (() CF.:<) . L.Global <$> from e
     Lst ["closure", e1, e2, e3] ->
       (() CF.:<)
         <$> (L.Closure <$> from e1 <*> from e2 <*> from e3)
@@ -209,7 +209,7 @@ instance (From l) => From (CF.Cofree (L.Expr l) ()) where
     where
       goBranch ::
         Sexp ->
-        Either T.Text (Maybe T.Text, ([l], CF.Cofree (L.Expr l) ()))
+        Either T.Text (Maybe T.Text, ([l], CF.Cofree (L.Expr g l) ()))
       goBranch = \case
         Lst [c, xs, e] -> do
           c' <- from c

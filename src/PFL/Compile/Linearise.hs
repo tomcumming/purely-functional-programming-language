@@ -29,9 +29,9 @@ data Unique = Unique !T.Text !Uid
 
 newtype Linearised ann = Linearised {unLinearised :: LExpr ann}
 
-type QExpr ann = CF.Cofree (Q.Expr T.Text) ann
+type QExpr ann = CF.Cofree (Q.Expr T.Text T.Text) ann
 
-type LExpr ann = CF.Cofree (Q.Expr Unique) ann
+type LExpr ann = CF.Cofree (Q.Expr T.Text Unique) ann
 
 -- TODO we need to catch and report on patterns with duplicate names:
 --   \(a, a) -> ...
@@ -47,7 +47,7 @@ linearise = \e -> Linearised $ snd $ evalState (cataA go e) (toEnum 0 :: Uid)
     go ::
       forall m ret.
       (MonadState Uid m, ret ~ (M.Map T.Text Uid, LExpr ann)) =>
-      CFT.CofreeF (Q.Expr T.Text) ann (m ret) -> m ret
+      CFT.CofreeF (Q.Expr T.Text T.Text) ann (m ret) -> m ret
     go = \case
       (ann CFT.:< Q.Local x) -> do
         uid <- fresh

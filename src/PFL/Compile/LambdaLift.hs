@@ -15,11 +15,12 @@ import Data.Functor.Foldable (cata, cataA)
 import Data.List (unsnoc)
 import Data.Map qualified as M
 import Data.Set qualified as S
+import Data.Text qualified as T
 import PFL.Compile.Linearise (Linearised, Uid, Unique (..), unLinearised)
 import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 
-type LExpr ann = CF.Cofree (L.Expr Unique) ann
+type LExpr ann = CF.Cofree (L.Expr T.Text Unique) ann
 
 lambdaLift :: forall ann. Linearised ann -> LExpr ann
 lambdaLift = foo . Q.annotateFree . unLinearised
@@ -28,7 +29,7 @@ lambdaLift = foo . Q.annotateFree . unLinearised
 
     go ::
       (MonadState Uid m) =>
-      CFT.CofreeF (Q.Expr Unique) (S.Set Unique, ann) (m (LExpr ann)) ->
+      CFT.CofreeF (Q.Expr T.Text Unique) (S.Set Unique, ann) (m (LExpr ann)) ->
       m (LExpr ann)
     go ((fs, ann) CFT.:< e) = case e of
       Q.Local x -> pure $ ann CF.:< L.Local x
@@ -45,7 +46,7 @@ lambdaLift = foo . Q.annotateFree . unLinearised
         bs <- traverse (secondA id) mbs
         pure $ ann CF.:< L.Match e' bs
 
-firstFresh :: CF.Cofree (Q.Expr Unique) ann -> Uid
+firstFresh :: CF.Cofree (Q.Expr T.Text Unique) ann -> Uid
 firstFresh = maybe (toEnum 0) succ . S.lookupMax . cata go
   where
     uid (Unique _ u) = u
@@ -68,10 +69,7 @@ makeClosure ann =
     Nothing -> ann CF.:< L.Global "Unit"
     Just (xs, x) -> foldr pairUp (ann CF.:< L.Local x) xs
   where
-    pairUp ::
-      Unique ->
-      CF.Cofree (L.Expr Unique) ann ->
-      CF.Cofree (L.Expr Unique) ann
+    pairUp :: Unique -> LExpr ann -> LExpr ann
     pairUp x e =
       ann
         CF.:< L.Ap

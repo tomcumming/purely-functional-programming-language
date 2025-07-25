@@ -12,16 +12,16 @@ import Data.Set qualified as S
 import Data.Text qualified as T
 import GHC.Generics (Generic1)
 
-data Expr l a
+data Expr g l a
   = Local l
-  | Global T.Text
+  | Global g
   | Closure a l a
   | Ap a a
   | Match a (M.Map (Maybe T.Text) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
-  deriving (Show1) via FunctorClassesDefault (Expr l)
+  deriving (Show1) via FunctorClassesDefault (Expr g l)
 
-free :: forall ann l. (Ord l) => CF.Cofree (Expr l) ann -> S.Set l
+free :: forall ann g l. (Ord l) => CF.Cofree (Expr g l) ann -> S.Set l
 free =
   cata $
     tailF >>> \case

@@ -11,20 +11,20 @@ import Data.Set qualified as S
 import Data.Text qualified as T
 import GHC.Generics (Generic1)
 
-data Expr l a
+data Expr g l a
   = Local l
-  | Global T.Text
+  | Global g
   | Abs l a
   | Ap a a
   | Match a (M.Map (Maybe T.Text) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
-  deriving (Show1) via FunctorClassesDefault (Expr l)
+  deriving (Show1) via FunctorClassesDefault (Expr g l)
 
 annotateFree ::
-  forall l ann.
+  forall g l ann.
   (Ord l) =>
-  CF.Cofree (Expr l) ann ->
-  CF.Cofree (Expr l) (S.Set l, ann)
+  CF.Cofree (Expr g l) ann ->
+  CF.Cofree (Expr g l) (S.Set l, ann)
 annotateFree = cata $ \(ann CFT.:< e) -> case e of
   Local x -> (S.singleton x, ann) CF.:< Local x
   Global x -> (mempty, ann) CF.:< Global x
@@ -38,5 +38,5 @@ annotateFree = cata $ \(ann CFT.:< e) -> case e of
     let f = fst (extract e') <> foldMap (uncurry goBranch) bs
      in (f, ann) CF.:< Match e' bs
   where
-    goBranch :: [l] -> CF.Cofree (Expr l) (S.Set l, ann) -> S.Set l
+    goBranch :: [l] -> CF.Cofree (Expr g l) (S.Set l, ann) -> S.Set l
     goBranch xs ((fs, _) CF.:< _) = S.difference fs (S.fromList xs)

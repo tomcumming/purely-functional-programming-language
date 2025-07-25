@@ -9,11 +9,11 @@ import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 import Test.Sexp qualified as Sexp
 
-type QExpr = CF.Cofree (Q.Expr T.Text) ()
+type QExpr = CF.Cofree (Q.Expr T.Text T.Text) ()
 
-type LExpr = CF.Cofree (Q.Expr Unique) ()
+type LExpr = CF.Cofree (Q.Expr T.Text Unique) ()
 
-type LLExpr = CF.Cofree (L.Expr Unique) ()
+type LLExpr = CF.Cofree (L.Expr T.Text Unique) ()
 
 main :: IO ()
 main = do

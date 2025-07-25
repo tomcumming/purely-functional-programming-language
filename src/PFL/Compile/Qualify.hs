@@ -14,7 +14,7 @@ import PFL.Expr.Qualified qualified as Q
 
 type InExpr ann = CF.Cofree In.Expr ann
 
-type QExpr ann = CF.Cofree (Q.Expr T.Text) ann
+type QExpr ann = CF.Cofree (Q.Expr T.Text T.Text) ann
 
 qualify :: InExpr ann -> QExpr ann
 qualify = flip runReader (mempty :: S.Set T.Text) . cataA go
