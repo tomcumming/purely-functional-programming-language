@@ -1,6 +1,9 @@
 module Test.Sexp
   ( Sexp (..),
     Into (..),
+    From (..),
+    parseFail,
+    parse,
     unify,
   )
 where
@@ -8,8 +11,9 @@ where
 import Control.Category ((>>>))
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree (tailF)
-import Control.Monad (zipWithM_)
-import Data.Bifunctor (first)
+import Control.Monad (zipWithM_, (>=>))
+import Data.Bifunctor (bimap, first)
+import Data.Char (isSpace)
 import Data.Functor.Foldable (cata)
 import Data.List qualified as L
 import Data.Map qualified as M
@@ -18,6 +22,7 @@ import Data.Text qualified as T
 import PFL.Compile.Linearise (Uid (..), Unique (..))
 import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
+import Text.Read (readEither)
 
 data Sexp
   = Atom T.Text
@@ -31,6 +36,36 @@ instance Show Sexp where
 
 instance IsString Sexp where
   fromString = Atom . T.pack
+
+parsePart :: T.Text -> Either T.Text (Sexp, T.Text)
+parsePart =
+  T.stripStart >>> T.uncons >>> \case
+    Nothing -> Left "EOS in Sexp part"
+    Just (c, s)
+      | c == '(' -> first ("When parsing list: " <>) $ first Lst <$> goList s
+      | otherwise ->
+          let (cs, s') = T.break atomChar s
+           in Right (Atom (T.cons c cs), s')
+  where
+    atomChar c = isSpace c || elem c ("()" :: String)
+
+    goList :: T.Text -> Either T.Text ([Sexp], T.Text)
+    goList =
+      T.stripStart >>> T.uncons >>> \case
+        Nothing -> Left "EOS in list"
+        Just (')', s) -> Right ([], s)
+        Just (c, s) -> do
+          (e, s') <- parsePart (T.cons c s)
+          first (e :) <$> goList s'
+
+parse :: T.Text -> Either T.Text Sexp
+parse =
+  parsePart >=> \case
+    (e, s) | T.all isSpace s -> pure e
+    (_, s) -> Left $ "Unexpected: " <> s
+
+parseFail :: (MonadFail m, From a) => T.Text -> m a
+parseFail = either (fail . T.unpack) pure . (parse >=> from)
 
 showText :: (Show a) => a -> T.Text
 showText = T.pack . show
@@ -86,12 +121,12 @@ instance (Into l) => Into (CF.Cofree (Q.Expr l) ann) where
       tailF >>> \case
         Q.Local x -> Lst ["local", into x]
         Q.Global x -> Lst ["global", into x]
-        Q.Abs x e -> Lst [Atom "abs", into x, e]
+        Q.Abs x e -> Lst ["abs", into x, e]
         Q.Ap e1 e2 -> Lst ["ap", e1, e2]
         Q.Match e bs -> Lst ("match" : e : M.foldMapWithKey goBranch bs)
     where
       goBranch :: Maybe T.Text -> ([l], Sexp) -> [Sexp]
-      goBranch mc (xs, e) = [Lst ["branch", into mc, into xs, e]]
+      goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
 
 instance (Into l) => Into (CF.Cofree (L.Expr l) ann) where
   into =
@@ -99,9 +134,86 @@ instance (Into l) => Into (CF.Cofree (L.Expr l) ann) where
       tailF >>> \case
         L.Local x -> Lst ["local", into x]
         L.Global x -> Lst ["global", into x]
-        L.Closure ctx x e -> Lst [Atom "closure", ctx, into x, e]
+        L.Closure ctx x e -> Lst ["closure", ctx, into x, e]
         L.Ap e1 e2 -> Lst ["ap", e1, e2]
         L.Match e bs -> Lst ("match" : e : M.foldMapWithKey goBranch bs)
     where
       goBranch :: Maybe T.Text -> ([l], Sexp) -> [Sexp]
-      goBranch mc (xs, e) = [Lst ["branch", into mc, into xs, e]]
+      goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
+
+class From a where
+  from :: Sexp -> Either T.Text a
+
+instance From T.Text where
+  from = \case
+    Atom s -> pure s
+    e -> Left $ "Expected text: " <> showText e
+
+instance (From a) => From (Maybe a) where
+  from = \case
+    "nothing" -> pure Nothing
+    Lst ["just", e] -> Just <$> from e
+    e -> Left $ "Expected Maybe: " <> showText e
+
+instance (From a) => From [a] where
+  from = \case
+    Lst xs -> traverse from xs
+    e -> Left $ "Expected list: " <> showText e
+
+instance From Uid where
+  from = \case
+    Atom s -> bimap T.pack Uid $ readEither $ T.unpack s
+    e -> Left $ "Expected Uid: " <> showText e
+
+instance From Unique where
+  from = \case
+    Lst [x, u] -> Unique <$> from x <*> from u
+    e -> Left $ "Expected Unique: " <> showText e
+
+instance (From l) => From (CF.Cofree (Q.Expr l) ()) where
+  from = \case
+    Lst ["local", e] -> (() CF.:<) . Q.Local <$> from e
+    Lst ["global", Atom x] -> pure $ () CF.:< Q.Global x
+    Lst ["abs", e1, e2] -> (() CF.:<) <$> (Q.Abs <$> from e1 <*> from e2)
+    Lst ["ap", e1, e2] -> (() CF.:<) <$> (Q.Ap <$> from e1 <*> from e2)
+    Lst ["match", e, Lst bs] -> do
+      e' <- from e
+      bs' <- M.fromList <$> traverse goBranch bs
+      pure $ () CF.:< Q.Match e' bs'
+    e -> Left $ "Expected QExpr: " <> showText e
+    where
+      goBranch ::
+        Sexp ->
+        Either T.Text (Maybe T.Text, ([l], CF.Cofree (Q.Expr l) ()))
+      goBranch = \case
+        Lst [c, xs, e] -> do
+          c' <- from c
+          xs' <- from xs
+          e' <- from e
+          pure (c', (xs', e'))
+        e -> Left $ "Expected match branch: " <> showText e
+
+instance (From l) => From (CF.Cofree (L.Expr l) ()) where
+  from = \case
+    Lst ["local", e] -> (() CF.:<) . L.Local <$> from e
+    Lst ["global", Atom x] -> pure $ () CF.:< L.Global x
+    Lst ["closure", e1, e2, e3] ->
+      (() CF.:<)
+        <$> (L.Closure <$> from e1 <*> from e2 <*> from e3)
+    Lst ["ap", e1, e2] -> (() CF.:<) <$> (L.Ap <$> from e1 <*> from e2)
+    Lst ["match", e, Lst bs] -> do
+      e' <- from e
+      bs' <- M.fromList <$> traverse goBranch bs
+      pure $ () CF.:< L.Match e' bs'
+    e -> Left $ "Expected LExpr: " <> showText e
+    where
+      goBranch ::
+        Sexp ->
+        Either T.Text (Maybe T.Text, ([l], CF.Cofree (L.Expr l) ()))
+      goBranch = \case
+        Lst [c, xs, e] -> do
+          c' <- from c
+          xs' <- from xs
+          e' <- from e
+          pure (c', (xs', e'))
+        e -> Left $ "Expected match branch: " <> showText e
