@@ -7,11 +7,16 @@ import Data.Foldable (fold)
 import Data.Functor.Classes (Show1)
 import Data.Functor.Classes.Generic (FunctorClassesDefault (..))
 import Data.Functor.Foldable (cata)
+import Data.Map qualified as M
 import Data.Set qualified as S
 import Data.Text qualified as T
 import GHC.Generics (Generic1)
 
-data Expr a = EVar T.Text | Abs T.Text a | Ap a a
+data Expr a
+  = EVar T.Text
+  | Abs T.Text a
+  | Ap a a
+  | Match a (M.Map (Maybe T.Text) ([T.Text], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault Expr
 
@@ -22,3 +27,7 @@ free =
       EVar x -> S.singleton x
       Abs x xs -> S.delete x xs
       e@Ap {} -> fold e
+      Match xs bs -> xs <> foldMap (uncurry goBranch) bs
+  where
+    goBranch :: [T.Text] -> S.Set T.Text -> S.Set T.Text
+    goBranch xs ys = S.difference ys (S.fromList xs)

@@ -16,7 +16,7 @@ type InExpr ann = CF.Cofree In.Expr ann
 
 type QExpr ann = CF.Cofree (Q.Expr T.Text T.Text) ann
 
-qualify :: InExpr ann -> QExpr ann
+qualify :: forall ann. InExpr ann -> QExpr ann
 qualify = flip runReader (mempty :: S.Set T.Text) . cataA go
   where
     go = \case
@@ -26,3 +26,8 @@ qualify = flip runReader (mempty :: S.Set T.Text) . cataA go
           False -> pure $ ann CF.:< Q.Global x
       ann CFT.:< In.Abs x me -> (ann CF.:<) . Q.Abs x <$> local (S.insert x) me
       ann CFT.:< In.Ap me1 me2 -> (ann CF.:<) <$> (Q.Ap <$> me1 <*> me2)
+      ann CFT.:< In.Match me bs ->
+        (ann CF.:<)
+          <$> (Q.Match <$> me <*> traverse (uncurry goBranch) bs)
+
+    goBranch xs me = (xs,) <$> local (S.union $ S.fromList xs) me
