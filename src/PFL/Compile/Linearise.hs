@@ -3,6 +3,7 @@ module PFL.Compile.Linearise
     Uid (..),
     Unique (..),
     Linearised,
+    Names (..),
     unLinearised,
   )
 where
@@ -33,13 +34,23 @@ type QExpr ann = CF.Cofree (Q.Expr T.Text T.Text) ann
 
 type LExpr ann = CF.Cofree (Q.Expr T.Text Unique) ann
 
+data Names = Names
+  { nmUnit :: !T.Text,
+    nmPair :: !T.Text,
+    nmCopy :: !T.Text,
+    nmDrop :: !T.Text
+  }
+
 -- TODO we need to catch and report on patterns with duplicate names:
 --   \(a, a) -> ...
 
 -- | Add drops and copies so every introduced name in the output expression is
 -- used linearly.
-linearise :: forall ann. QExpr ann -> Linearised ann
-linearise = \e -> Linearised $ snd $ evalState (cataA go e) (toEnum 0 :: Uid)
+linearise :: forall ann. Names -> QExpr ann -> Linearised ann
+linearise nms = \e ->
+  Linearised $
+    snd $
+      evalState (cataA go e) (toEnum 0 :: Uid)
   where
     fresh :: (MonadState Uid m) => m Uid
     fresh = state $ \n -> (n, succ n)
@@ -60,19 +71,19 @@ linearise = \e -> Linearised $ snd $ evalState (cataA go e) (toEnum 0 :: Uid)
       (ann CFT.:< Q.Ap me1 me2) -> do
         (us1, e1) <- me1
         (us2, e2) <- me2
-        let f = doCopy ann [us1, us2]
+        let f = doCopy nms ann [us1, us2]
         pure $ f $ ann CF.:< Q.Ap e1 e2
       (ann CFT.:< Q.Match me mbs) -> do
         (ue, e) <- me
         (ubs, bs) <- do
           bs' <- traverse (uncurry goMatchBranch) mbs
           pure (fst <$> M.elems bs', snd <$> bs')
-        let f = doCopy ann (ue : ubs)
+        let f = doCopy nms ann (ue : ubs)
         pure $ f $ ann CF.:< Q.Match e bs
       where
         goIntro :: ann -> T.Text -> ret -> m (Unique, ret)
         goIntro ann x (used, e) = do
-          let (x', used', e') = doDrop ann x used e
+          let (x', used', e') = doDrop nms ann x used e
           pure (x', (used', e'))
 
         goMatchBranch ::
@@ -89,19 +100,20 @@ linearise = \e -> Linearised $ snd $ evalState (cataA go e) (toEnum 0 :: Uid)
           pure (used, (us, e'))
 
 doDrop ::
+  Names ->
   ann ->
   T.Text ->
   M.Map T.Text Uid ->
   LExpr ann ->
   (Unique, M.Map T.Text Uid, LExpr ann)
-doDrop ann x used e = case used M.!? x of
+doDrop nms@Names {nmUnit} ann x used e = case used M.!? x of
   Nothing ->
     ( x',
       M.delete x used,
       ann
         CF.:< Q.Match
-          (callDrop ann $ ann CF.:< Q.Local x')
-          (M.singleton (Just "Unit") ([], e))
+          (callDrop nms ann $ ann CF.:< Q.Local x')
+          (M.singleton (Just nmUnit) ([], e))
     )
     where
       x' = Unique x (toEnum 0)
@@ -113,11 +125,12 @@ doDrop ann x used e = case used M.!? x of
 
 doCopy ::
   forall ann.
+  Names ->
   ann ->
   [M.Map T.Text Uid] ->
   LExpr ann ->
   (M.Map T.Text Uid, LExpr ann)
-doCopy ann us =
+doCopy nms@Names {nmPair} ann us =
   let (ds, ls) = takeDupes us
    in \e -> M.foldrWithKey goName (ls, e) ds
   where
@@ -137,15 +150,19 @@ doCopy ann us =
       ( M.insert xx xu used,
         ann
           CF.:< Q.Match
-            (callCopy ann $ ann CF.:< Q.Local x)
-            (M.singleton (Just "Pair") ([x, Unique xx u], e))
+            (callCopy nms ann $ ann CF.:< Q.Local x)
+            (M.singleton (Just nmPair) ([x, Unique xx u], e))
       )
 
-callDrop :: ann -> LExpr ann -> LExpr ann
-callDrop ann = (ann CF.:<) . Q.Ap (ann CF.:< Q.Global "drop")
+callDrop :: Names -> ann -> LExpr ann -> LExpr ann
+callDrop Names {nmDrop} ann =
+  (ann CF.:<)
+    . Q.Ap (ann CF.:< Q.Global nmDrop)
 
-callCopy :: ann -> LExpr ann -> LExpr ann
-callCopy ann = (ann CF.:<) . Q.Ap (ann CF.:< Q.Global "copy")
+callCopy :: Names -> ann -> LExpr ann -> LExpr ann
+callCopy Names {nmCopy} ann =
+  (ann CF.:<)
+    . Q.Ap (ann CF.:< Q.Global nmCopy)
 
 takeDupes ::
   [M.Map T.Text Uid] ->

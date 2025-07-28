@@ -1,5 +1,6 @@
 module PFL.Compile.LambdaLift
   ( lambdaLift,
+    Names (..),
   )
 where
 
@@ -22,8 +23,14 @@ import PFL.Expr.Qualified qualified as Q
 
 type LExpr ann = CF.Cofree (L.Expr T.Text Unique) ann
 
-lambdaLift :: forall ann. Linearised ann -> LExpr ann
-lambdaLift = foo . Q.annotateFree . unLinearised
+data Names = Names
+  { nmUnit :: !T.Text,
+    nmPair :: !T.Text,
+    nmClosure :: !T.Text
+  }
+
+lambdaLift :: forall ann. Names -> Linearised ann -> LExpr ann
+lambdaLift nms = foo . Q.annotateFree . unLinearised
   where
     foo e = flip evalState (firstFresh e) $ cataA go e
 
@@ -35,8 +42,8 @@ lambdaLift = foo . Q.annotateFree . unLinearised
       Q.Local x -> pure $ ann CF.:< L.Local x
       Q.Global x -> pure $ ann CF.:< L.Global x
       Q.Abs x me' -> do
-        e' <- bindClosure fs x =<< me'
-        pure $ ann CF.:< L.Closure (makeClosure ann fs) x e'
+        e' <- bindClosure nms fs x =<< me'
+        pure $ ann CF.:< L.Closure (makeClosure nms ann fs) x e'
       Q.Ap me1 me2 -> do
         e1 <- me1
         e2 <- me2
@@ -63,17 +70,17 @@ firstFresh = maybe (toEnum 0) succ . S.lookupMax . cata go
               (\(xs, us') -> foldMap (S.singleton . uid) xs <> us')
               bs
 
-makeClosure :: forall ann. ann -> S.Set Unique -> LExpr ann
-makeClosure ann =
+makeClosure :: forall ann. Names -> ann -> S.Set Unique -> LExpr ann
+makeClosure Names {nmUnit, nmPair} ann =
   S.toList >>> unsnoc >>> \case
-    Nothing -> ann CF.:< L.Global "Unit"
+    Nothing -> ann CF.:< L.Global nmUnit
     Just (xs, x) -> foldr pairUp (ann CF.:< L.Local x) xs
   where
     pairUp :: Unique -> LExpr ann -> LExpr ann
     pairUp x e =
       ann
         CF.:< L.Ap
-          (ann CF.:< L.Ap (ann CF.:< L.Global "Pair") (ann CF.:< L.Local x))
+          (ann CF.:< L.Ap (ann CF.:< L.Global nmPair) (ann CF.:< L.Local x))
           e
 
 fresh :: (MonadState Uid m) => m Uid
@@ -81,34 +88,36 @@ fresh = state $ \u -> (u, succ u)
 
 bindClosure ::
   (MonadState Uid m) =>
+  Names ->
   S.Set Unique ->
   Unique ->
   LExpr ann ->
   m (LExpr ann)
-bindClosure fs x originalBody = do
-  ctx <- Unique "ctx" <$> fresh
-  eBody <- bindClosureContext ann ctx originalBody (S.toList fs)
+bindClosure nms@Names {nmClosure, nmPair} fs x originalBody = do
+  ctx <- Unique nmClosure <$> fresh
+  eBody <- bindClosureContext nms ann ctx originalBody (S.toList fs)
   pure $
     ann
       CF.:< L.Match
         (ann CF.:< L.Local x)
-        (M.singleton (Just "Pair") ([x, ctx], eBody))
+        (M.singleton (Just nmPair) ([x, ctx], eBody))
   where
     ann = extract originalBody
 
 bindClosureContext ::
   (MonadState Uid m) =>
+  Names ->
   ann ->
   Unique ->
   LExpr ann ->
   [Unique] ->
   m (LExpr ann)
-bindClosureContext ann u eBody fs = do
+bindClosureContext nms@Names {..} ann u eBody fs = do
   bs <- case fs of
-    [] -> pure $ M.singleton (Just "Unit") ([], eBody)
+    [] -> pure $ M.singleton (Just nmUnit) ([], eBody)
     [x] -> pure $ M.singleton Nothing ([x], eBody)
     x : xs -> do
-      ctx <- Unique "ctx" <$> fresh
-      eBody' <- bindClosureContext ann ctx eBody xs
-      pure $ M.singleton (Just "Pair") ([x, ctx], eBody')
+      ctx <- Unique nmClosure <$> fresh
+      eBody' <- bindClosureContext nms ann ctx eBody xs
+      pure $ M.singleton (Just nmPair) ([x, ctx], eBody')
   pure $ ann CF.:< L.Match (ann CF.:< L.Local u) bs

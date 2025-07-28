@@ -7,7 +7,8 @@ common shared
     default-language: GHC2024
     default-extensions:
         DerivingVia,
-        OverloadedStrings
+        OverloadedStrings,
+        RecordWildCards
     build-depends:
         base ^>=4.21.0.0,
         text,

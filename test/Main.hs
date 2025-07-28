@@ -3,8 +3,13 @@ module Main (main) where
 import Control.Comonad.Cofree qualified as CF
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
-import PFL.Compile.LambdaLift (lambdaLift)
-import PFL.Compile.Linearise (Unique (..), linearise, unLinearised)
+import PFL.Compile.LambdaLift as LambdaLift (Names (..), lambdaLift)
+import PFL.Compile.Linearise as Linearise
+  ( Names (..),
+    Unique (..),
+    linearise,
+    unLinearised,
+  )
 import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 import Test.Sexp qualified as Sexp
@@ -19,6 +24,23 @@ main :: IO ()
 main = do
   testLinearise
   testLambdaLift
+
+linNames :: Linearise.Names
+linNames =
+  Linearise.Names
+    { nmUnit = "Unit",
+      nmPair = "Pair",
+      nmDrop = "drop",
+      nmCopy = "copy"
+    }
+
+llNames :: LambdaLift.Names
+llNames =
+  LambdaLift.Names
+    { nmUnit = "Unit",
+      nmPair = "Pair",
+      nmClosure = "ctx"
+    }
 
 testLinearise :: IO ()
 testLinearise = do
@@ -50,7 +72,7 @@ testLinearise = do
       T.putStr $ "  Testing " <> name <> "... "
       inpt :: QExpr <- Sexp.parseFail inptStr
       expected :: LExpr <- Sexp.parseFail expectedStr
-      let outpt = unLinearised $ linearise inpt
+      let outpt = unLinearised $ linearise linNames inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> T.putStrLn "OK"
         Left err -> do
@@ -80,7 +102,7 @@ testLambdaLift = do
       T.putStr $ "  Testing " <> name <> "... "
       inpt :: QExpr <- Sexp.parseFail inptStr
       expected :: LLExpr <- Sexp.parseFail expectedStr
-      let outpt = lambdaLift $ linearise inpt
+      let outpt = lambdaLift llNames $ linearise linNames inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> T.putStrLn "OK"
         Left err -> do
