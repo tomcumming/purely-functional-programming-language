@@ -1,9 +1,8 @@
-module PFL.Expr.In (Expr (..), free) where
+module PFL.Expr.In (Expr (..), annotateFree) where
 
-import Control.Category ((>>>))
+import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
-import Control.Comonad.Trans.Cofree (tailF)
-import Data.Foldable (fold)
+import Control.Comonad.Trans.Cofree qualified as CFT
 import Data.Functor.Classes (Show1)
 import Data.Functor.Classes.Generic (FunctorClassesDefault (..))
 import Data.Functor.Foldable (cata)
@@ -20,14 +19,20 @@ data Expr a
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault Expr
 
-free :: CF.Cofree Expr ann -> S.Set T.Text
-free =
-  cata $
-    tailF >>> \case
-      EVar x -> S.singleton x
-      Abs x xs -> S.delete x xs
-      e@Ap {} -> fold e
-      Match xs bs -> xs <> foldMap (uncurry goBranch) bs
+annotateFree ::
+  forall ann.
+  CF.Cofree Expr ann ->
+  CF.Cofree Expr (S.Set T.Text, ann)
+annotateFree = cata $ \(ann CFT.:< e) -> case e of
+  EVar x -> (S.singleton x, ann) CF.:< EVar x
+  Abs x e' ->
+    let f = S.delete x $ fst $ extract e'
+     in (f, ann) CF.:< Abs x e'
+  Ap e1 e2 ->
+    let f = fst (extract e1) <> fst (extract e2)
+     in (f, ann) CF.:< Ap e1 e2
+  Match e' bs ->
+    let f = fst (extract e') <> foldMap (uncurry goBranch) bs
+     in (f, ann) CF.:< Match e' bs
   where
-    goBranch :: [T.Text] -> S.Set T.Text -> S.Set T.Text
-    goBranch xs ys = S.difference ys (S.fromList xs)
+    goBranch xs ((fs, _) CF.:< _) = S.difference fs (S.fromList xs)
