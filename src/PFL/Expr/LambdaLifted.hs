@@ -9,7 +9,6 @@ import Data.Functor.Classes.Generic (FunctorClassesDefault (..))
 import Data.Functor.Foldable (cata)
 import Data.Map qualified as M
 import Data.Set qualified as S
-import Data.Text qualified as T
 import GHC.Generics (Generic1)
 
 data Expr g l a
@@ -17,7 +16,7 @@ data Expr g l a
   | Global g
   | Closure a l a
   | Ap a a
-  | Match a (M.Map (Maybe T.Text) ([l], a))
+  | Match a (M.Map (Maybe g) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault (Expr g l)
 

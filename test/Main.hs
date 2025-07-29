@@ -6,7 +6,6 @@ import Data.Text.IO qualified as T
 import PFL.Compile.LambdaLift as LambdaLift (Names (..), lambdaLift)
 import PFL.Compile.Linearise as Linearise
   ( Names (..),
-    Unique (..),
     linearise,
     unLinearised,
   )
@@ -16,16 +15,16 @@ import Test.Sexp qualified as Sexp
 
 type QExpr = CF.Cofree (Q.Expr T.Text T.Text) ()
 
-type LExpr = CF.Cofree (Q.Expr T.Text Unique) ()
+type LExpr = CF.Cofree (Q.Expr T.Text T.Text) ()
 
-type LLExpr = CF.Cofree (L.Expr T.Text Unique) ()
+type LLExpr = CF.Cofree (L.Expr T.Text T.Text) ()
 
 main :: IO ()
 main = do
   testLinearise
   testLambdaLift
 
-linNames :: Linearise.Names
+linNames :: Linearise.Names T.Text
 linNames =
   Linearise.Names
     { nmUnit = "Unit",
@@ -34,7 +33,7 @@ linNames =
       nmCopy = "copy"
     }
 
-llNames :: LambdaLift.Names
+llNames :: LambdaLift.Names T.Text T.Text
 llNames =
   LambdaLift.Names
     { nmUnit = "Unit",
@@ -50,8 +49,8 @@ testLinearise = do
     "dropSimple"
     "(abs x (global unit))"
     $ T.unlines
-      [ "(abs (x 0) (match",
-        "  (ap (global drop) (local (x 0)))",
+      [ "(abs x (match",
+        "  (ap (global drop) (local x))",
         "  ( ( (just Unit) () (global unit) ) )",
         "))"
       ]
@@ -59,10 +58,10 @@ testLinearise = do
     "copySimple"
     "(abs x (ap (local x) (local x)))"
     $ T.unlines
-      [ "(abs (x 0) (match",
-        "  (ap (global copy) (local (x 0)))",
-        "  ( ( (just Pair) ((x 0) (x 1))",
-        "    (ap (local (x 0)) (local (x 1)))",
+      [ "(abs x (match",
+        "  (ap (global copy) (local x))",
+        "  ( ( (just Pair) (x x0)",
+        "    (ap (local x) (local x0))",
         "  ) )",
         "))"
       ]
@@ -86,11 +85,11 @@ testLambdaLift = do
     "id"
     "(abs x (local x))"
     $ T.unlines
-      [ "(closure (global Unit) (x 0)",
-        "  (match (local (x 0)) (",
-        "    ((just Pair) ((x 0) (ctx 1))",
-        "      (match (local (ctx 1)) (",
-        "        ((just Unit) () (local (x 0)))",
+      [ "(closure (global Unit) x",
+        "  (match (local x) (",
+        "    ((just Pair) (x ctx)",
+        "      (match (local ctx) (",
+        "        ((just Unit) () (local x))",
         "      ))",
         "    )",
         "  ))",
@@ -102,7 +101,7 @@ testLambdaLift = do
       T.putStr $ "  Testing " <> name <> "... "
       inpt :: QExpr <- Sexp.parseFail inptStr
       expected :: LLExpr <- Sexp.parseFail expectedStr
-      let outpt = lambdaLift llNames $ linearise linNames inpt
+      let outpt :: LLExpr = lambdaLift llNames $ linearise linNames inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> T.putStrLn "OK"
         Left err -> do

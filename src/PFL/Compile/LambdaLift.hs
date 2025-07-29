@@ -5,119 +5,89 @@ module PFL.Compile.LambdaLift
 where
 
 import Control.Category ((>>>))
-import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
-import Control.Comonad.Trans.Cofree (tailF)
 import Control.Comonad.Trans.Cofree qualified as CFT
-import Control.Monad.State (MonadState, evalState, state)
-import Data.Bitraversable (secondA)
-import Data.Foldable (fold)
-import Data.Functor.Foldable (cata, cataA)
-import Data.List (unsnoc)
+import Data.Functor.Foldable (cata)
 import Data.Map qualified as M
 import Data.Set qualified as S
 import Data.Text qualified as T
-import PFL.Compile.Linearise (Linearised, Uid, Unique (..), unLinearised)
+import PFL.Compile.Linearise (Linearised, unLinearised)
 import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 
-type LExpr ann = CF.Cofree (L.Expr T.Text Unique) ann
+type LExpr g ann = CF.Cofree (L.Expr g T.Text) ann
 
-data Names = Names
-  { nmUnit :: !T.Text,
-    nmPair :: !T.Text,
-    nmClosure :: !T.Text
+data Names g l = Names
+  { nmUnit :: !g,
+    nmPair :: !g,
+    nmClosure :: !l
   }
 
-lambdaLift :: forall ann. Names -> Linearised ann -> LExpr ann
-lambdaLift nms = foo . Q.annotateFree . unLinearised
+lambdaLift ::
+  forall g ann.
+  Names g T.Text ->
+  Linearised g ann ->
+  LExpr g ann
+lambdaLift Names {..} = cata alg . Q.annotateFree . unLinearised
   where
-    foo e = flip evalState (firstFresh e) $ cataA go e
+    alg ::
+      CFT.CofreeF (Q.Expr g T.Text) (S.Set T.Text, ann) (LExpr g ann) ->
+      LExpr g ann
+    alg ((fs, ann) CFT.:< inExpr) = case inExpr of
+      Q.Local x -> ann CF.:< L.Local x
+      Q.Global x -> ann CF.:< L.Global x
+      Q.Abs x e ->
+        let fs' = S.delete x fs
+         in ann CF.:< L.Closure (makeClosure ann fs') x (bindClosure ann x fs' e)
+      Q.Ap e1 e2 -> ann CF.:< L.Ap e1 e2
+      Q.Match e bs -> ann CF.:< L.Match e bs
 
-    go ::
-      (MonadState Uid m) =>
-      CFT.CofreeF (Q.Expr T.Text Unique) (S.Set Unique, ann) (m (LExpr ann)) ->
-      m (LExpr ann)
-    go ((fs, ann) CFT.:< e) = case e of
-      Q.Local x -> pure $ ann CF.:< L.Local x
-      Q.Global x -> pure $ ann CF.:< L.Global x
-      Q.Abs x me' -> do
-        e' <- bindClosure nms fs x =<< me'
-        pure $ ann CF.:< L.Closure (makeClosure nms ann fs) x e'
-      Q.Ap me1 me2 -> do
-        e1 <- me1
-        e2 <- me2
-        pure $ ann CF.:< L.Ap e1 e2
-      Q.Match me' mbs -> do
-        e' <- me'
-        bs <- traverse (secondA id) mbs
-        pure $ ann CF.:< L.Match e' bs
+    makeClosure :: ann -> S.Set T.Text -> LExpr g ann
+    makeClosure ann =
+      S.maxView >>> \case
+        Nothing -> ann CF.:< L.Global nmUnit
+        Just (x, xs) ->
+          foldr
+            ( \y e ->
+                ann
+                  CF.:< L.Ap
+                    (ann CF.:< L.Ap (ann CF.:< L.Global nmPair) (ann CF.:< L.Local y))
+                    e
+            )
+            (ann CF.:< L.Local x)
+            xs
 
-firstFresh :: CF.Cofree (Q.Expr T.Text Unique) ann -> Uid
-firstFresh = maybe (toEnum 0) succ . S.lookupMax . cata go
-  where
-    uid (Unique _ u) = u
-
-    go =
-      tailF >>> \case
-        Q.Local u -> S.singleton $ uid u
-        Q.Global {} -> mempty
-        Q.Abs u us -> S.insert (uid u) us
-        e@Q.Ap {} -> fold e
-        Q.Match us bs ->
-          us
-            <> foldMap
-              (\(xs, us') -> foldMap (S.singleton . uid) xs <> us')
-              bs
-
-makeClosure :: forall ann. Names -> ann -> S.Set Unique -> LExpr ann
-makeClosure Names {nmUnit, nmPair} ann =
-  S.toList >>> unsnoc >>> \case
-    Nothing -> ann CF.:< L.Global nmUnit
-    Just (xs, x) -> foldr pairUp (ann CF.:< L.Local x) xs
-  where
-    pairUp :: Unique -> LExpr ann -> LExpr ann
-    pairUp x e =
+    bindClosure ::
+      ann ->
+      T.Text ->
+      S.Set T.Text ->
+      LExpr g ann ->
+      LExpr g ann
+    bindClosure ann x fs e =
       ann
-        CF.:< L.Ap
-          (ann CF.:< L.Ap (ann CF.:< L.Global nmPair) (ann CF.:< L.Local x))
-          e
+        CF.:< L.Match
+          (ann CF.:< L.Local x)
+          (M.singleton (Just nmPair) ([x, ctx], bindNames ann ctx e fs))
+      where
+        ctx = freshNameLike fs nmClosure
 
-fresh :: (MonadState Uid m) => m Uid
-fresh = state $ \u -> (u, succ u)
+    bindNames :: ann -> T.Text -> LExpr g ann -> S.Set T.Text -> LExpr g ann
+    bindNames ann ctx e = go . S.toList
+      where
+        go :: [T.Text] -> LExpr g ann
+        go =
+          (ann CF.:<) . L.Match (ann CF.:< L.Local ctx) . \case
+            [] -> M.singleton (Just nmUnit) ([], e)
+            [x] -> M.singleton Nothing ([x], e)
+            x : xs -> M.singleton (Just nmPair) ([x, ctx], go xs)
 
-bindClosure ::
-  (MonadState Uid m) =>
-  Names ->
-  S.Set Unique ->
-  Unique ->
-  LExpr ann ->
-  m (LExpr ann)
-bindClosure nms@Names {nmClosure, nmPair} fs x originalBody = do
-  ctx <- Unique nmClosure <$> fresh
-  eBody <- bindClosureContext nms ann ctx originalBody (S.toList fs)
-  pure $
-    ann
-      CF.:< L.Match
-        (ann CF.:< L.Local x)
-        (M.singleton (Just nmPair) ([x, ctx], eBody))
+freshNameLike :: S.Set T.Text -> T.Text -> T.Text
+freshNameLike fs x
+  | S.notMember x fs = x
+  | otherwise = go 0
   where
-    ann = extract originalBody
-
-bindClosureContext ::
-  (MonadState Uid m) =>
-  Names ->
-  ann ->
-  Unique ->
-  LExpr ann ->
-  [Unique] ->
-  m (LExpr ann)
-bindClosureContext nms@Names {..} ann u eBody fs = do
-  bs <- case fs of
-    [] -> pure $ M.singleton (Just nmUnit) ([], eBody)
-    [x] -> pure $ M.singleton Nothing ([x], eBody)
-    x : xs -> do
-      ctx <- Unique nmClosure <$> fresh
-      eBody' <- bindClosureContext nms ann ctx eBody xs
-      pure $ M.singleton (Just nmPair) ([x, ctx], eBody')
-  pure $ ann CF.:< L.Match (ann CF.:< L.Local u) bs
+    go (n :: Int)
+      | name <- x <> T.pack (show n),
+        S.notMember name fs =
+          name
+      | otherwise = go (succ n)
