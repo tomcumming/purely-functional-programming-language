@@ -19,8 +19,9 @@ import Data.List qualified as L
 import Data.Map qualified as M
 import Data.String (IsString, fromString)
 import Data.Text qualified as T
-import PFL.Expr.LambdaLifted qualified as L
+import PFL.Expr.In qualified as In
 import PFL.Expr.Qualified qualified as Q
+import Text.Read (readMaybe)
 
 data Sexp
   = Atom T.Text
@@ -96,8 +97,16 @@ unify = curry $ \case
 class Into a where
   into :: a -> Sexp
 
+instance Into Sexp where
+  into = id
+
 instance Into T.Text where
   into = Atom
+
+instance (Into l) => Into (Q.Local l) where
+  into = \case
+    Q.Named x -> into x
+    Q.Anon n -> Atom $ showText n <> "x"
 
 instance (Into a) => Into [a] where
   into = Lst . fmap into
@@ -107,28 +116,33 @@ instance (Into a) => Into (Maybe a) where
     Nothing -> "nothing"
     Just x -> Lst ["just", into x]
 
+instance Into (CF.Cofree In.Expr ann) where
+  into =
+    cata $
+      tailF >>> \case
+        In.EVar x -> Atom x
+        In.Abs x e -> Lst ["abs", into x, into e]
+        In.Ap e1 e2 -> Lst [into e1, into e2]
+        In.Match e bs -> Lst ("match" : into e : M.foldMapWithKey goBranch bs)
+    where
+      goBranch :: Maybe T.Text -> ([T.Text], Sexp) -> [Sexp]
+      goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
+
+instance (Into g, Into l, Into e) => Into (Q.Val g l e) where
+  into = \case
+    Q.Local x -> Lst ["local", into x]
+    Q.Global x -> Lst ["global", into x]
+    Q.Abs x e -> Lst ["abs", into x, into e]
+
 instance (Into g, Into l) => Into (CF.Cofree (Q.Expr g l) ann) where
   into =
     cata $
       tailF >>> \case
-        Q.Local x -> Lst ["local", into x]
-        Q.Global x -> Lst ["global", into x]
-        Q.Abs x e -> Lst ["abs", into x, e]
-        Q.Ap e1 e2 -> Lst ["ap", e1, e2]
-        Q.Match e bs -> Lst ("match" : e : M.foldMapWithKey goBranch bs)
-    where
-      goBranch :: Maybe g -> ([l], Sexp) -> [Sexp]
-      goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
-
-instance (Into g, Into l) => Into (CF.Cofree (L.Expr g l) ann) where
-  into =
-    cata $
-      tailF >>> \case
-        L.Local x -> Lst ["local", into x]
-        L.Global x -> Lst ["global", into x]
-        L.Closure ctx x e -> Lst ["closure", ctx, into x, e]
-        L.Ap e1 e2 -> Lst ["ap", e1, e2]
-        L.Match e bs -> Lst ("match" : e : M.foldMapWithKey goBranch bs)
+        Q.Val v -> into v
+        Q.Ap v1 v2 x e ->
+          Lst
+            ["let", into x, "=", into v1, into v2, "in", into e]
+        Q.Match e bs -> Lst ("match" : into e : M.foldMapWithKey goBranch bs)
     where
       goBranch :: Maybe g -> ([l], Sexp) -> [Sexp]
       goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
@@ -141,6 +155,15 @@ instance From T.Text where
     Atom s -> pure s
     e -> Left $ "Expected text: " <> showText e
 
+instance (From l) => From (Q.Local l) where
+  from = \case
+    Atom x
+      | Just ns <- T.stripSuffix "x" x,
+        Just n <- readMaybe (T.unpack ns) ->
+          Right $ Q.Anon n
+    e | Right l <- from e -> pure $ Q.Named l
+    e -> Left $ "Expected Local: " <> showText e
+
 instance (From a) => From (Maybe a) where
   from = \case
     "nothing" -> pure Nothing
@@ -152,21 +175,20 @@ instance (From a) => From [a] where
     Lst xs -> traverse from xs
     e -> Left $ "Expected list: " <> showText e
 
-instance (Ord g, From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
+instance From (CF.Cofree In.Expr ()) where
   from = \case
-    Lst ["local", e] -> (() CF.:<) . Q.Local <$> from e
-    Lst ["global", e] -> (() CF.:<) . Q.Global <$> from e
-    Lst ["abs", e1, e2] -> (() CF.:<) <$> (Q.Abs <$> from e1 <*> from e2)
-    Lst ["ap", e1, e2] -> (() CF.:<) <$> (Q.Ap <$> from e1 <*> from e2)
-    Lst ["match", e, Lst bs] -> do
+    Lst ["abs", x, e] -> (() CF.:<) <$> (In.Abs <$> from x <*> from e)
+    Lst ("match" : e : bs) -> do
       e' <- from e
       bs' <- M.fromList <$> traverse goBranch bs
-      pure $ () CF.:< Q.Match e' bs'
-    e -> Left $ "Expected QExpr: " <> showText e
+      pure $ () CF.:< In.Match e' bs'
+    Lst [e1, e2] -> (() CF.:<) <$> (In.Ap <$> from e1 <*> from e2)
+    Atom x -> pure $ () CF.:< In.EVar x
+    e -> Left $ "Expected InExpr: " <> showText e
     where
       goBranch ::
         Sexp ->
-        Either T.Text (Maybe g, ([l], CF.Cofree (Q.Expr g l) ()))
+        Either T.Text (Maybe T.Text, ([T.Text], CF.Cofree In.Expr ()))
       goBranch = \case
         Lst [c, xs, e] -> do
           c' <- from c
@@ -175,23 +197,31 @@ instance (Ord g, From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
           pure (c', (xs', e'))
         e -> Left $ "Expected match branch: " <> showText e
 
-instance (Ord g, From g, From l) => From (CF.Cofree (L.Expr g l) ()) where
+instance (From g, From l, From e) => From (Q.Val g l e) where
   from = \case
-    Lst ["local", e] -> (() CF.:<) . L.Local <$> from e
-    Lst ["global", e] -> (() CF.:<) . L.Global <$> from e
-    Lst ["closure", e1, e2, e3] ->
-      (() CF.:<)
-        <$> (L.Closure <$> from e1 <*> from e2 <*> from e3)
-    Lst ["ap", e1, e2] -> (() CF.:<) <$> (L.Ap <$> from e1 <*> from e2)
-    Lst ["match", e, Lst bs] -> do
+    Lst ["local", e] -> Q.Local <$> from e
+    Lst ["global", e] -> Q.Global <$> from e
+    Lst ["abs", e1, e2] -> Q.Abs <$> from e1 <*> from e2
+    e -> Left $ "Unexpected QVal: " <> showText e
+
+instance (Ord g, From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
+  from = \case
+    e | Right v <- from e -> pure $ () CF.:< Q.Val v
+    Lst ["let", e1, "=", e2, e3, "in", e4] -> do
+      x <- from e1
+      v1 <- from e2
+      v2 <- from e3
+      e <- from e4
+      pure $ () CF.:< Q.Ap v1 v2 x e
+    Lst ("match" : e : bs) -> do
       e' <- from e
       bs' <- M.fromList <$> traverse goBranch bs
-      pure $ () CF.:< L.Match e' bs'
-    e -> Left $ "Expected LExpr: " <> showText e
+      pure $ () CF.:< Q.Match e' bs'
+    e -> Left $ "Expected QExpr: " <> showText e
     where
       goBranch ::
         Sexp ->
-        Either T.Text (Maybe g, ([l], CF.Cofree (L.Expr g l) ()))
+        Either T.Text (Maybe g, ([l], CF.Cofree (Q.Expr g l) ()))
       goBranch = \case
         Lst [c, xs, e] -> do
           c' <- from c

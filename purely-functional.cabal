@@ -23,12 +23,9 @@ library
     import: shared
     hs-source-dirs: src
     exposed-modules:
-        PFL.Compile.LambdaLift
-        PFL.Compile.Linearise
         PFL.Compile.Qualify
         PFL.Expr.In
         PFL.Expr.Qualified
-        PFL.Expr.LambdaLifted
 
 test-suite purely-functional-test
     import: shared
