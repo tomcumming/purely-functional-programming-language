@@ -11,7 +11,7 @@ import Optics qualified as O
 
 data Local l
   = Named l
-  | Anon Int
+  | Anon Word
   deriving (Eq, Ord, Show)
 
 data Expr g l a

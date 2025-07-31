@@ -25,6 +25,7 @@ library
     hs-source-dirs: src
     exposed-modules:
         PFL.Compile.Qualify
+        PFL.Compile.Thread
         PFL.Expr.In
         PFL.Expr.Qualified
 
