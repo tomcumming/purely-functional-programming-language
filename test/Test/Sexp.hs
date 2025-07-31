@@ -128,20 +128,14 @@ instance Into (CF.Cofree In.Expr ann) where
       goBranch :: Maybe T.Text -> ([T.Text], Sexp) -> [Sexp]
       goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
 
-instance (Into g, Into l, Into e) => Into (Q.Val g l e) where
-  into = \case
-    Q.Local x -> Lst ["local", into x]
-    Q.Global x -> Lst ["global", into x]
-    Q.Abs x e -> Lst ["abs", into x, into e]
-
 instance (Into g, Into l) => Into (CF.Cofree (Q.Expr g l) ann) where
   into =
     cata $
       tailF >>> \case
-        Q.Val v -> into v
-        Q.Ap v1 v2 x e ->
-          Lst
-            ["let", into x, "=", into v1, into v2, "in", into e]
+        Q.Local l -> Lst ["local", into l]
+        Q.Global g -> Lst ["global", into g]
+        Q.Abs x e -> Lst ["abs", into x, e]
+        Q.Ap e1 e2 -> Lst [e1, e2]
         Q.Match e bs -> Lst ("match" : into e : M.foldMapWithKey goBranch bs)
     where
       goBranch :: Maybe g -> ([l], Sexp) -> [Sexp]
@@ -197,26 +191,16 @@ instance From (CF.Cofree In.Expr ()) where
           pure (c', (xs', e'))
         e -> Left $ "Expected match branch: " <> showText e
 
-instance (From g, From l, From e) => From (Q.Val g l e) where
-  from = \case
-    Lst ["local", e] -> Q.Local <$> from e
-    Lst ["global", e] -> Q.Global <$> from e
-    Lst ["abs", e1, e2] -> Q.Abs <$> from e1 <*> from e2
-    e -> Left $ "Unexpected QVal: " <> showText e
-
 instance (Ord g, From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
   from = \case
-    e | Right v <- from e -> pure $ () CF.:< Q.Val v
-    Lst ["let", e1, "=", e2, e3, "in", e4] -> do
-      x <- from e1
-      v1 <- from e2
-      v2 <- from e3
-      e <- from e4
-      pure $ () CF.:< Q.Ap v1 v2 x e
+    Lst ["local", x] -> (() CF.:<) . Q.Local <$> from x
+    Lst ["global", x] -> (() CF.:<) . Q.Global <$> from x
+    Lst ["abs", x, e] -> (() CF.:<) <$> (Q.Abs <$> from x <*> from e)
     Lst ("match" : e : bs) -> do
       e' <- from e
       bs' <- M.fromList <$> traverse goBranch bs
       pure $ () CF.:< Q.Match e' bs'
+    Lst [e1, e2] -> (() CF.:<) <$> (Q.Ap <$> from e1 <*> from e2)
     e -> Left $ "Expected QExpr: " <> showText e
     where
       goBranch ::

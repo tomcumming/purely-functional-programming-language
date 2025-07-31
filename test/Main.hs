@@ -23,23 +23,15 @@ testQualify = do
   doTest
     "id"
     "(abs x x)"
-    $ T.unlines
-      [ "(abs x (local x))"
-      ]
+    "(abs x (local x))"
   doTest
     "const global"
     "(abs x y)"
-    $ T.unlines
-      [ "(abs x (global y))"
-      ]
+    "(abs x (global y))"
   doTest
     "simple app"
     "(f x)"
-    $ T.unlines
-      [ "(match (global f) (nothing (0x)",
-        "  (let 1x = (local 0x) (global x) in (local 1x))",
-        ") )"
-      ]
+    "((global f) (global x))"
   where
     doTest :: T.Text -> T.Text -> T.Text -> IO ()
     doTest name inptStr expectedStr = do
