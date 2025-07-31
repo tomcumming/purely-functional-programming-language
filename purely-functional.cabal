@@ -17,7 +17,8 @@ common shared
         comonad,
         transformers-compat,
         recursion-schemes,
-        free
+        free,
+        optics
 
 library
     import: shared

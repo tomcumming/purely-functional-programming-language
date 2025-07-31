@@ -1,9 +1,13 @@
-module PFL.Expr.Qualified (Local (..), Expr (..)) where
+module PFL.Expr.Qualified (Local (..), Expr (..), anonymise) where
 
+import Control.Comonad.Cofree qualified as CF
+import Control.Comonad.Trans.Cofree qualified as CFT
 import Data.Functor.Classes (Show1)
 import Data.Functor.Classes.Generic (FunctorClassesDefault (..))
+import Data.Functor.Foldable (cata)
 import Data.Map qualified as M
 import GHC.Generics (Generic1)
+import Optics qualified as O
 
 data Local l
   = Named l
@@ -18,3 +22,31 @@ data Expr g l a
   | Match a (M.Map (Maybe g) ([l], a))
   deriving (Eq, Ord, Show, Functor, Foldable, Generic1)
   deriving (Show1) via FunctorClassesDefault (Expr g l)
+
+locals ::
+  forall g l l' ann.
+  O.Traversal
+    (CF.Cofree (Expr g l) ann)
+    (CF.Cofree (Expr g l') ann)
+    l
+    l'
+locals = O.traversalVL $ \f -> cata (alg f)
+  where
+    alg ::
+      (Applicative m) =>
+      (l -> m l') ->
+      CFT.CofreeF (Expr g l) ann (m (CF.Cofree (Expr g l') ann)) ->
+      m (CF.Cofree (Expr g l') ann)
+    alg f = \case
+      ann CFT.:< Local x -> (ann CF.:<) . Local <$> f x
+      ann CFT.:< Global x -> pure $ ann CF.:< Global x
+      ann CFT.:< Abs x me -> (ann CF.:<) <$> (Abs <$> f x <*> me)
+      ann CFT.:< Ap me1 me2 -> (ann CF.:<) <$> (Ap <$> me1 <*> me2)
+      ann CFT.:< Match me bs ->
+        (ann CF.:<)
+          <$> (Match <$> me <*> traverse (uncurry goBranch) bs)
+      where
+        goBranch xs me = (,) <$> traverse f xs <*> me
+
+anonymise :: CF.Cofree (Expr g l) ann -> CF.Cofree (Expr g (Local l)) ann
+anonymise = O.over locals Named
