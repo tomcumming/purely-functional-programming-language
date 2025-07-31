@@ -11,7 +11,6 @@ import Data.Bifunctor (second)
 import Data.Foldable (fold)
 import Data.Functor.Foldable (cata, cataA)
 import Data.Map qualified as M
-import Data.Monoid (Ap (..))
 import Data.Semigroup (Max (..))
 import PFL.Expr.Qualified qualified as Q
 
@@ -36,7 +35,7 @@ thread nms@Names {nmThreaded} = cata alg
               let w = maybe 0 succ $ maxAnon e2
                   e2' = evalState (thread' nms (Q.Anon w) e2) (succ w)
                in ann CF.:< Q.Abs (Q.Anon w) e2'
-        _ -> e1
+        _ -> ann CF.:< Q.Ap e1 e2
       ann CFT.:< Q.Match e bs -> ann CF.:< Q.Match e bs
 
 data Threading = Simple | Threaded deriving (Eq)
@@ -134,7 +133,7 @@ thread' Names {nmPair, nmThread} w =
         pure (ef, ann CF.:< Q.Local x)
 
 maxAnon :: QExpr g l ann -> Maybe Word
-maxAnon = getAp . fmap getMax . cata alg
+maxAnon = fmap getMax . cata alg
   where
     alg =
       CFT.tailF >>> \case
@@ -145,7 +144,6 @@ maxAnon = getAp . fmap getMax . cata alg
 
     goBranch xs m = m <> foldMap goLocal xs
 
-    goLocal =
-      Ap . \case
-        Q.Named {} -> Nothing
-        Q.Anon x -> Just $ Max x
+    goLocal = \case
+      Q.Named {} -> Nothing
+      Q.Anon x -> Just $ Max x
