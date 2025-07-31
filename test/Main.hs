@@ -4,6 +4,7 @@ import Control.Comonad.Cofree qualified as CF
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import PFL.Compile.Qualify (qualify)
+import PFL.Compile.Thread qualified as Thread
 import PFL.Expr.In qualified as In
 import PFL.Expr.Qualified qualified as Q
 import Test.Sexp qualified as Sexp
@@ -15,6 +16,7 @@ type QExpr = CF.Cofree (Q.Expr T.Text T.Text) ()
 main :: IO ()
 main = do
   testQualify
+  testThread
 
 testQualify :: IO ()
 testQualify = do
@@ -39,6 +41,32 @@ testQualify = do
       inpt :: InExpr <- Sexp.parseFail inptStr
       expected :: QExpr <- Sexp.parseFail expectedStr
       let outpt = qualify inpt
+      case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
+        Right () -> T.putStrLn "OK"
+        Left err -> do
+          T.putStrLn "FAIL"
+          T.putStrLn err
+
+testThread :: IO ()
+testThread = do
+  T.putStrLn "Testing Thread..."
+  doTest
+    "simplest"
+    "(threaded (! mx))"
+    "(abs 0x ((global mx) (local 0x)))"
+  where
+    doTest :: T.Text -> T.Text -> T.Text -> IO ()
+    doTest name inptStr expectedStr = do
+      T.putStr $ "  Testing " <> name <> "... "
+      inpt :: InExpr <- Sexp.parseFail inptStr
+      expected :: QExpr <- Sexp.parseFail expectedStr
+      let nms =
+            Thread.Names
+              { nmThreaded = "threaded",
+                nmThread = "!",
+                nmPair = "Pair"
+              }
+      let outpt = Thread.thread nms $ Q.anonymise $ qualify inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> T.putStrLn "OK"
         Left err -> do
