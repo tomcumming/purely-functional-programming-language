@@ -25,15 +25,15 @@ lambdaLift ::
   Names g ->
   QExpr g l ann ->
   LExpr g l ann
-lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata alg inExpr
+lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata algMain inExpr
   where
-    alg ::
+    algMain ::
       CFT.CofreeF
         (Q.Expr g (Q.Local l))
         ann
         (S.Set (Q.Local l), LExpr g l ann) ->
       (S.Set (Q.Local l), LExpr g l ann)
-    alg = \case
+    algMain = \case
       ann CFT.:< Q.Local l -> (S.singleton l, ann CF.:< L.Local l)
       ann CFT.:< Q.Global g -> (mempty, ann CF.:< L.Global g)
       ann CFT.:< Q.Abs x (ls, e) ->
@@ -66,25 +66,28 @@ lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata alg inExpr
       S.Set (Q.Local l) ->
       LExpr g l ann
     unPair ann lArg eBody =
-      S.maxView >>> \case
-        Nothing ->
+      S.maxView
+        >>> \case
+          Nothing ->
+            unPairArg lArg fresh lArg $
+              ann
+                CF.:< L.Match
+                  (ann CF.:< L.Local fresh)
+                  (M.singleton (Just nmUnit) ([], eBody))
+          Just (lMax, ls) -> case S.maxView ls of
+            Nothing -> unPairArg lArg lMax lArg eBody
+            Just (lMax2, ls2) ->
+              unPairArg lArg fresh lArg $
+                foldr
+                  (\l -> unPairArg fresh l fresh)
+                  (unPairArg fresh lMax2 lMax eBody)
+                  ls2
+      where
+        unPairArg l1 l2 l3 e =
           ann
             CF.:< L.Match
-              (ann CF.:< L.Local lArg)
-              ( M.singleton
-                  (Just nmPair)
-                  ( [fresh, lArg],
-                    ann
-                      CF.:< L.Match
-                        (ann CF.:< L.Local fresh)
-                        (M.singleton (Just nmUnit) ([], eBody))
-                  )
-              )
-        Just (lMax, ls) ->
-          foldr
-            (\l e -> callPair ann (ann CF.:< L.Local l) e)
-            (ann CF.:< L.Local lMax)
-            ls
+              (ann CF.:< L.Local l1)
+              (M.singleton (Just nmPair) ([l2, l3], e))
 
     callPair ann e1 e2 = ann CF.:< L.Ap (callFn ann nmPair e1) e2
     callFn ann f e = ann CF.:< L.Ap (ann CF.:< L.Global f) e
