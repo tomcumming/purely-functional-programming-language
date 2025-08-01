@@ -94,7 +94,25 @@ testLinearise =
           [ "(abs x (match ((global drop) (local x))",
             "  ( (just Unit) () (global y) )",
             "))"
-          ]
+          ],
+      testExpected
+        "Drop in branch"
+        ( T.unlines
+            [ "(match (local x)",
+              "  ( (just Foo) () (local y) )",
+              "  ( (just Bar) () (global z) )",
+              ")"
+            ]
+        )
+        ( T.unlines
+            [ "(match (local x)",
+              "  ( (just Foo) () (local y) )",
+              "  ( (just Bar) () (match ((global drop) (local y))",
+              "    ( (just Unit) () (global z) )",
+              "  ))",
+              ")"
+            ]
+        )
     ]
   where
     testExpected name inptStr expectedStr = testCase name $ do
