@@ -28,19 +28,19 @@ lambdaLift ::
 lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata alg inExpr
   where
     alg ::
-      CFT.CofreeF (Q.Expr g (Q.Local l)) ann (S.Set (Q.Local l), LExpr g l ann) ->
+      CFT.CofreeF
+        (Q.Expr g (Q.Local l))
+        ann
+        (S.Set (Q.Local l), LExpr g l ann) ->
       (S.Set (Q.Local l), LExpr g l ann)
     alg = \case
       ann CFT.:< Q.Local l -> (S.singleton l, ann CF.:< L.Local l)
       ann CFT.:< Q.Global g -> (mempty, ann CF.:< L.Global g)
       ann CFT.:< Q.Abs x (ls, e) ->
-        ( S.delete x ls,
-          ann
-            CF.:< L.Closure
-              (pairUp ann ls)
-              x
-              (unPair ann x e ls)
-        )
+        let ls' = S.delete x ls
+         in ( S.delete x ls',
+              ann CF.:< L.Closure (pairUp ann ls') x (unPair ann x e ls')
+            )
       ann CFT.:< Q.Ap (ls1, e1) (ls2, e2) -> (ls1 <> ls2, ann CF.:< L.Ap e1 e2)
       ann CFT.:< Q.Match (ls1, e1) bs ->
         let ls2 = foldMap (fst . snd) bs
@@ -59,7 +59,12 @@ lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata alg inExpr
             (ann CF.:< L.Local lMax)
             ls
 
-    unPair :: ann -> Q.Local l -> LExpr g l ann -> S.Set (Q.Local l) -> LExpr g l ann
+    unPair ::
+      ann ->
+      Q.Local l ->
+      LExpr g l ann ->
+      S.Set (Q.Local l) ->
+      LExpr g l ann
     unPair ann lArg eBody =
       S.maxView >>> \case
         Nothing ->
