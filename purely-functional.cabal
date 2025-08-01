@@ -37,4 +37,6 @@ test-suite purely-functional-test
     main-is: Main.hs
     other-modules: Test.Sexp
     build-depends:
-        purely-functional
+        purely-functional,
+        tasty,
+        tasty-hunit
