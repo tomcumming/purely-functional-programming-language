@@ -38,7 +38,7 @@ testQualify =
         ["abs", "x", "y"]
         ["abs", "x", ["global", "y"]],
       testExpected
-        "simple app"
+        "Simple app"
         ["f", "x"]
         [["global", "f"], ["global", "x"]]
     ]
@@ -56,7 +56,7 @@ testThread =
   testGroup
     "Thread"
     [ testExpected
-        "simplest"
+        "Simplest"
         ["threaded", ["!", "mx"]]
         ["abs", "0x", [["global", "mx"], ["local", "0x"]]]
     ]

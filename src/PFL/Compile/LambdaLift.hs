@@ -12,8 +12,7 @@ import PFL.Expr.Qualified qualified as Q
 
 data Names g = Names
   { nmUnit :: g,
-    nmPair :: g,
-    nmDrop :: g
+    nmPair :: g
   }
 
 type QExpr g l ann = CF.Cofree (Q.Expr g (Q.Local l)) ann
@@ -26,7 +25,7 @@ lambdaLift ::
   Names g ->
   QExpr g l ann ->
   LExpr g l ann
-lambdaLift Names {nmPair, nmUnit, nmDrop} inExpr = snd $ cata alg inExpr
+lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata alg inExpr
   where
     alg ::
       CFT.CofreeF (Q.Expr g (Q.Local l)) ann (S.Set (Q.Local l), LExpr g l ann) ->
@@ -72,7 +71,7 @@ lambdaLift Names {nmPair, nmUnit, nmDrop} inExpr = snd $ cata alg inExpr
                   ( [fresh, lArg],
                     ann
                       CF.:< L.Match
-                        (callDrop ann (ann CF.:< L.Local fresh))
+                        (ann CF.:< L.Local fresh)
                         (M.singleton (Just nmUnit) ([], eBody))
                   )
               )
@@ -82,6 +81,5 @@ lambdaLift Names {nmPair, nmUnit, nmDrop} inExpr = snd $ cata alg inExpr
             (ann CF.:< L.Local lMax)
             ls
 
-    callDrop ann = callFn ann nmDrop
     callPair ann e1 e2 = ann CF.:< L.Ap (callFn ann nmPair e1) e2
     callFn ann f e = ann CF.:< L.Ap (ann CF.:< L.Global f) e
