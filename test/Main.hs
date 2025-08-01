@@ -2,10 +2,12 @@ module Main (main) where
 
 import Control.Comonad.Cofree qualified as CF
 import Data.Text qualified as T
+import PFL.Compile.LambdaLift qualified as LambdaLift
 import PFL.Compile.Linearise qualified as Linearise
 import PFL.Compile.Qualify (qualify)
 import PFL.Compile.Thread qualified as Thread
 import PFL.Expr.In qualified as In
+import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 import Test.Sexp qualified as Sexp
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -15,6 +17,8 @@ type InExpr = CF.Cofree In.Expr ()
 
 type QExpr = CF.Cofree (Q.Expr T.Text T.Text) ()
 
+type LExpr = CF.Cofree (L.Expr T.Text T.Text) ()
+
 main :: IO ()
 main =
   defaultMain $
@@ -22,7 +26,8 @@ main =
       "PFL"
       [ testQualify,
         testThread,
-        testLinearise
+        testLinearise,
+        testLambdaLift
       ]
 
 testQualify :: TestTree
@@ -127,6 +132,42 @@ testLinearise =
                 nmUnit = "Unit"
               }
       let outpt = Linearise.linearise nms $ Q.anonymise inpt
+      case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
+        Right () -> pure ()
+        Left err -> fail (T.unpack err)
+
+testLambdaLift :: TestTree
+testLambdaLift =
+  testGroup
+    "Linearise"
+    [ testExpected
+        "id"
+        ["abs", "x", ["local", "x"]]
+        [ "closure",
+          ["global", "Unit"],
+          "x",
+          [ "match",
+            ["local", "x"],
+            [ ["just", "Pair"],
+              ["0x", "x"],
+              [ "match",
+                ["local", "0x"],
+                [["just", "Unit"], [], ["local", "x"]]
+              ]
+            ]
+          ]
+        ]
+    ]
+  where
+    testExpected name inptStr expectedStr = testCase name $ do
+      inpt :: QExpr <- Sexp.fromFail inptStr
+      expected :: LExpr <- Sexp.fromFail expectedStr
+      let nms =
+            LambdaLift.Names
+              { nmPair = "Pair",
+                nmUnit = "Unit"
+              }
+      let outpt = LambdaLift.lambdaLift nms $ Q.anonymise inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> pure ()
         Left err -> fail (T.unpack err)

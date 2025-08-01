@@ -19,6 +19,7 @@ import Data.String (IsString, fromString)
 import Data.Text qualified as T
 import GHC.IsList (IsList, Item, fromList, toList)
 import PFL.Expr.In qualified as In
+import PFL.Expr.LambdaLifted qualified as L
 import PFL.Expr.Qualified qualified as Q
 import Text.Read (readMaybe)
 
@@ -120,6 +121,19 @@ instance (Into g, Into l) => Into (CF.Cofree (Q.Expr g l) ann) where
       goBranch :: Maybe g -> ([l], Sexp) -> [Sexp]
       goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
 
+instance (Into g, Into l) => Into (CF.Cofree (L.Expr g l) ann) where
+  into =
+    cata $
+      tailF >>> \case
+        L.Local l -> Lst ["local", into l]
+        L.Global g -> Lst ["global", into g]
+        L.Closure e1 x e2 -> Lst ["closure", e1, into x, e2]
+        L.Ap e1 e2 -> Lst [e1, e2]
+        L.Match e bs -> Lst ("match" : into e : M.foldMapWithKey goBranch bs)
+    where
+      goBranch :: Maybe g -> ([l], Sexp) -> [Sexp]
+      goBranch mc (xs, e) = [Lst [into mc, into xs, e]]
+
 class From a where
   from :: Sexp -> Either T.Text a
 
@@ -185,6 +199,29 @@ instance (Ord g, From g, From l) => From (CF.Cofree (Q.Expr g l) ()) where
       goBranch ::
         Sexp ->
         Either T.Text (Maybe g, ([l], CF.Cofree (Q.Expr g l) ()))
+      goBranch = \case
+        Lst [c, xs, e] -> do
+          c' <- from c
+          xs' <- from xs
+          e' <- from e
+          pure (c', (xs', e'))
+        e -> Left $ "Expected match branch: " <> showText e
+
+instance (Ord g, From g, From l) => From (CF.Cofree (L.Expr g l) ()) where
+  from = \case
+    Lst ["local", x] -> (() CF.:<) . L.Local <$> from x
+    Lst ["global", x] -> (() CF.:<) . L.Global <$> from x
+    Lst ["closure", e1, x, e2] -> (() CF.:<) <$> (L.Closure <$> from e1 <*> from x <*> from e2)
+    Lst ("match" : e : bs) -> do
+      e' <- from e
+      bs' <- M.fromList <$> traverse goBranch bs
+      pure $ () CF.:< L.Match e' bs'
+    Lst [e1, e2] -> (() CF.:<) <$> (L.Ap <$> from e1 <*> from e2)
+    e -> Left $ "Expected QExpr: " <> showText e
+    where
+      goBranch ::
+        Sexp ->
+        Either T.Text (Maybe g, ([l], CF.Cofree (L.Expr g l) ()))
       goBranch = \case
         Lst [c, xs, e] -> do
           c' <- from c
