@@ -79,12 +79,20 @@ testLinearise :: IO ()
 testLinearise = do
   T.putStrLn "Testing Linearise..."
   doTest
-    "Simplest"
+    "Simplest copy"
     "((local x) (local x))"
     $ T.unlines
       [ "(match ((global copy) (local x))",
         "  ( (just Pair) (x 0x) ((local 0x) (local x)) )",
         ")"
+      ]
+  doTest
+    "Simplest drop"
+    "(abs x (global y))"
+    $ T.unlines
+      [ "(abs x (match ((global drop) (local x))",
+        "  ( (just Unit) () (global y) )",
+        "))"
       ]
   where
     doTest :: T.Text -> T.Text -> T.Text -> IO ()
