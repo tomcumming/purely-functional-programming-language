@@ -156,6 +156,20 @@ testLambdaLift =
               ]
             ]
           ]
+        ],
+      testExpected
+        "Simple closure"
+        ["abs", "x", [["local", "f"], ["local", "x"]]]
+        [ "closure",
+          ["local", "f"],
+          "x",
+          [ "match",
+            ["local", "x"],
+            [ ["just", "Pair"],
+              ["f", "x"],
+              [["local", "f"], ["local", "x"]]
+            ]
+          ]
         ]
     ]
   where
