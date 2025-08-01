@@ -190,6 +190,32 @@ testLambdaLift =
               ]
             ]
           ]
+        ],
+      testExpected
+        "Close-over 3"
+        ["abs", "x", [[[["local", "f"], ["local", "x"]], ["local", "y"]], ["local", "z"]]]
+        [ "closure",
+          [[["global", "Pair"], ["local", "f"]], [[["global", "Pair"], ["local", "y"]], ["local", "z"]]],
+          "x",
+          [ "match",
+            ["local", "x"],
+            [ ["just", "Pair"],
+              ["0x", "x"],
+              [ "match",
+                ["local", "0x"],
+                [ ["just", "Pair"],
+                  ["f", "0x"],
+                  [ "match",
+                    ["local", "0x"],
+                    [ ["just", "Pair"],
+                      ["y", "z"],
+                      [[[["local", "f"], ["local", "x"]], ["local", "y"]], ["local", "z"]]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
         ]
     ]
   where
