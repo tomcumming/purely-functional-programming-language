@@ -20,7 +20,12 @@ data Names g = Names
 
 type QExpr g l ann = CF.Cofree (Q.Expr g (Q.Local l)) ann
 
-linearise :: forall g l ann. (Ord l) => Names g -> QExpr g l ann -> QExpr g l ann
+linearise ::
+  forall g l ann.
+  (Ord l) =>
+  Names g ->
+  QExpr g l ann ->
+  QExpr g l ann
 linearise nms = \inExpr ->
   let xf = maybe 0 succ $ Q.maxAnon inExpr
    in snd $ evalState (cataA alg inExpr) xf
@@ -34,11 +39,8 @@ linearise nms = \inExpr ->
       ann CFT.:< Q.Global x -> pure (mempty, ann CF.:< Q.Global x)
       ann CFT.:< Q.Abs x me -> do
         (fs, e) <- me
-        let maybeDrop =
-              if M.member x fs
-                then id
-                else doDrops nms (S.singleton x)
-        pure (M.delete x fs, ann CF.:< Q.Abs x (maybeDrop e))
+        let drops = doDrops nms (S.difference (S.singleton x) (M.keysSet fs))
+        pure (M.delete x fs, ann CF.:< Q.Abs x (drops e))
       ann CFT.:< Q.Ap me1 me2 -> do
         (fs1, e1) <- me1
         (fs2, e2) <- me2
