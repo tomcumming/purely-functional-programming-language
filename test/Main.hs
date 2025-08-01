@@ -31,21 +31,21 @@ testQualify =
     "Qualify"
     [ testExpected
         "id"
-        "(abs x x)"
-        "(abs x (local x))",
+        ["abs", "x", "x"]
+        ["abs", "x", ["local", "x"]],
       testExpected
         "const global"
-        "(abs x y)"
-        "(abs x (global y))",
+        ["abs", "x", "y"]
+        ["abs", "x", ["global", "y"]],
       testExpected
         "simple app"
-        "(f x)"
-        "((global f) (global x))"
+        ["f", "x"]
+        [["global", "f"], ["global", "x"]]
     ]
   where
     testExpected name inptStr expectedStr = testCase name $ do
-      inpt :: InExpr <- Sexp.parseFail inptStr
-      expected :: QExpr <- Sexp.parseFail expectedStr
+      inpt :: InExpr <- Sexp.fromFail inptStr
+      expected :: QExpr <- Sexp.fromFail expectedStr
       let outpt = qualify inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> pure ()
@@ -57,13 +57,13 @@ testThread =
     "Thread"
     [ testExpected
         "simplest"
-        "(threaded (! mx))"
-        "(abs 0x ((global mx) (local 0x)))"
+        ["threaded", ["!", "mx"]]
+        ["abs", "0x", [["global", "mx"], ["local", "0x"]]]
     ]
   where
     testExpected name inptStr expectedStr = testCase name $ do
-      inpt :: InExpr <- Sexp.parseFail inptStr
-      expected :: QExpr <- Sexp.parseFail expectedStr
+      inpt :: InExpr <- Sexp.fromFail inptStr
+      expected :: QExpr <- Sexp.fromFail expectedStr
       let nms =
             Thread.Names
               { nmThreaded = "threaded",
@@ -81,43 +81,44 @@ testLinearise =
     "Linearise"
     [ testExpected
         "Simplest copy"
-        "((local x) (local x))"
-        $ T.unlines
-          [ "(match ((global copy) (local x))",
-            "  ( (just Pair) (x 0x) ((local 0x) (local x)) )",
-            ")"
-          ],
+        [["local", "x"], ["local", "x"]]
+        [ "match",
+          [["global", "copy"], ["local", "x"]],
+          [["just", "Pair"], ["x", "0x"], [["local", "0x"], ["local", "x"]]]
+        ],
       testExpected
         "Simplest drop"
-        "(abs x (global y))"
-        $ T.unlines
-          [ "(abs x (match ((global drop) (local x))",
-            "  ( (just Unit) () (global y) )",
-            "))"
-          ],
+        ["abs", "x", ["global", "y"]]
+        [ "abs",
+          "x",
+          [ "match",
+            [["global", "drop"], ["local", "x"]],
+            [["just", "Unit"], [], ["global", "y"]]
+          ]
+        ],
       testExpected
         "Drop in branch"
-        ( T.unlines
-            [ "(match (local x)",
-              "  ( (just Foo) () (local y) )",
-              "  ( (just Bar) () (global z) )",
-              ")"
+        [ "match",
+          ["local", "x"],
+          [["just", "Foo"], [], ["local", "y"]],
+          [["just", "Bar"], [], ["global", "z"]]
+        ]
+        [ "match",
+          ["local", "x"],
+          [["just", "Foo"], [], ["local", "y"]],
+          [ ["just", "Bar"],
+            [],
+            [ "match",
+              [["global", "drop"], ["local", "y"]],
+              [["just", "Unit"], [], ["global", "z"]]
             ]
-        )
-        ( T.unlines
-            [ "(match (local x)",
-              "  ( (just Foo) () (local y) )",
-              "  ( (just Bar) () (match ((global drop) (local y))",
-              "    ( (just Unit) () (global z) )",
-              "  ))",
-              ")"
-            ]
-        )
+          ]
+        ]
     ]
   where
     testExpected name inptStr expectedStr = testCase name $ do
-      inpt :: QExpr <- Sexp.parseFail inptStr
-      expected :: QExpr <- Sexp.parseFail expectedStr
+      inpt :: QExpr <- Sexp.fromFail inptStr
+      expected :: QExpr <- Sexp.fromFail expectedStr
       let nms =
             Linearise.Names
               { nmCopy = "copy",

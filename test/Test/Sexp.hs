@@ -2,8 +2,7 @@ module Test.Sexp
   ( Sexp (..),
     Into (..),
     From (..),
-    parseFail,
-    parse,
+    fromFail,
     unify,
   )
 where
@@ -11,14 +10,14 @@ where
 import Control.Category ((>>>))
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree (tailF)
-import Control.Monad (zipWithM_, (>=>))
+import Control.Monad (zipWithM_)
 import Data.Bifunctor (first)
-import Data.Char (isSpace)
 import Data.Functor.Foldable (cata)
 import Data.List qualified as L
 import Data.Map qualified as M
 import Data.String (IsString, fromString)
 import Data.Text qualified as T
+import GHC.IsList (IsList, Item, fromList, toList)
 import PFL.Expr.In qualified as In
 import PFL.Expr.Qualified qualified as Q
 import Text.Read (readMaybe)
@@ -31,43 +30,23 @@ data Sexp
 instance Show Sexp where
   show = \case
     Atom t -> T.unpack t
-    Lst ss -> "(" <> L.unwords (show <$> ss) <> ")"
+    Lst ss -> "[" <> L.unwords (show <$> ss) <> "]"
 
 instance IsString Sexp where
   fromString = Atom . T.pack
 
-parsePart :: T.Text -> Either T.Text (Sexp, T.Text)
-parsePart =
-  T.stripStart >>> T.uncons >>> \case
-    Nothing -> Left "EOS in Sexp part"
-    Just (c, s)
-      | c == '(' -> first ("When parsing list: " <>) $ first Lst <$> goList s
-      | otherwise ->
-          let (cs, s') = T.break atomChar s
-           in Right (Atom (T.cons c cs), s')
-  where
-    atomChar c = isSpace c || elem c ("()" :: String)
-
-    goList :: T.Text -> Either T.Text ([Sexp], T.Text)
-    goList =
-      T.stripStart >>> T.uncons >>> \case
-        Nothing -> Left "EOS in list"
-        Just (')', s) -> Right ([], s)
-        Just (c, s) -> do
-          (e, s') <- parsePart (T.cons c s)
-          first (e :) <$> goList s'
-
-parse :: T.Text -> Either T.Text Sexp
-parse =
-  parsePart >=> \case
-    (e, s) | T.all isSpace s -> pure e
-    (_, s) -> Left $ "Unexpected: " <> s
-
-parseFail :: (MonadFail m, From a) => T.Text -> m a
-parseFail = either (fail . T.unpack) pure . (parse >=> from)
+instance IsList Sexp where
+  type Item Sexp = Sexp
+  fromList = Lst
+  toList = \case
+    Lst ss -> ss
+    Atom {} -> error "Can't toList an Atom"
 
 showText :: (Show a) => a -> T.Text
 showText = T.pack . show
+
+fromFail :: (MonadFail m, From a) => Sexp -> m a
+fromFail = either (fail . T.unpack) pure . from
 
 unify :: Sexp -> Sexp -> Either T.Text ()
 unify = curry $ \case
