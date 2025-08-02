@@ -43,7 +43,10 @@ lambdaLift Names {nmPair, nmUnit} inExpr = snd $ cata algMain inExpr
             )
       ann CFT.:< Q.Ap (ls1, e1) (ls2, e2) -> (ls1 <> ls2, ann CF.:< L.Ap e1 e2)
       ann CFT.:< Q.Match (ls1, e1) bs ->
-        let ls2 = foldMap (fst . snd) bs
+        let ls2 =
+              foldMap
+                (\(xs, (ls, _)) -> S.difference ls (S.fromList xs))
+                bs
             bs' = second snd <$> bs
          in (ls1 <> ls2, ann CF.:< L.Match e1 bs')
 
