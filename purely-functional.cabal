@@ -31,6 +31,9 @@ library
         PFL.Expr.In
         PFL.Expr.LambdaLifted
         PFL.Expr.Qualified
+        PFL.Typing.Check
+        PFL.Typing.Kind
+        PFL.Typing.Type
 
 test-suite purely-functional-test
     import: shared
