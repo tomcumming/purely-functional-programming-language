@@ -10,7 +10,7 @@ where
 import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree qualified as CFT
-import Control.Monad (zipWithM)
+import Control.Monad (join, zipWithM)
 import Control.Monad.Free (Free (..))
 import Control.Monad.RWS.Class (MonadRWS, asks, local, modify, state, tell)
 import Data.Functor.Foldable (cataA)
@@ -153,7 +153,7 @@ infer = cataA $ \case
       ([l], m (CF.Cofree (LL.Expr g l) (Ty' g, ann))) ->
       m ([l], CF.Cofree (LL.Expr g l) (Free (Ty.Ty Kind' g) TyVar', ann))
     goBranch t cn (xs, mae) = do
-      mc <- maybe (pure Nothing) lookupConstructor cn
+      mc <- join <$> traverse lookupConstructor cn
       (tc, txs) <- case mc of
         Nothing -> pure (t, [])
         Just (tc, txs) -> pure (tc, txs)
