@@ -115,7 +115,21 @@ infer = cataA $ \case
     let tRet = fst $ extract eRet
     t <- typeClosure tCtx tArg tRet
     pure $ (t, ann) CF.:< LL.Closure eCtx x eRet
-  _ann CFT.:< LL.Ap {} -> error "TODO"
+  ann CFT.:< LL.Ap me1 me2 -> do
+    ae1 <- me1
+    let t1 = fst $ extract ae1
+    ae2 <- me2
+    let t2 = fst $ extract ae2
+
+    tCtx <- Pure <$> freshType (Right Kind.Type)
+    tArg <- Pure <$> freshType (Right Kind.Type)
+    tRet <- Pure <$> freshType (Right Kind.Type)
+
+    tCls <- typeClosure tCtx tArg tRet
+    pushCons $ TyEq t1 tCls
+    pushCons $ TyEq t2 tArg
+
+    pure $ (tRet, ann) CF.:< LL.Ap ae1 ae2
   _ann CFT.:< LL.Match {} -> error "TODO"
 
 unknownName :: (Check g l m) => m TyVar'
