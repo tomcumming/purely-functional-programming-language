@@ -10,6 +10,7 @@ where
 import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree qualified as CFT
+import Control.Monad (zipWithM)
 import Control.Monad.Free (Free (..))
 import Control.Monad.RWS.Class (MonadRWS, asks, local, modify, state, tell)
 import Data.Functor.Foldable (cataA)
@@ -61,8 +62,9 @@ data Issue g l
 data Env g l = Env
   { envClosure :: g,
     envPair :: g,
+    envConstrs :: M.Map g (Ty' g, [Ty' g]), -- These should actually be some solved type
     envLocals :: M.Map l (Ty' g),
-    envGlobals :: M.Map g (Ty' g) -- These should actually be some solved type
+    envGlobals :: M.Map g (Ty' g) -- as should these
   }
 
 type LExpr g l ann = CF.Cofree (LL.Expr g l) ann
@@ -88,6 +90,7 @@ pushLocal x t = local $ \env ->
     }
 
 infer ::
+  forall g l ann m.
   (Check g l m) =>
   LExpr g l ann ->
   m (AExpr g l ann)
@@ -130,7 +133,51 @@ infer = cataA $ \case
     pushCons $ TyEq t2 tArg
 
     pure $ (tRet, ann) CF.:< LL.Ap ae1 ae2
-  _ann CFT.:< LL.Match {} -> error "TODO"
+  ann CFT.:< LL.Match me1 mbs -> do
+    ae1 <- me1
+    let t1 = fst $ extract ae1
+    bs <- M.traverseWithKey (goBranch t1) mbs
+    let tbs = fst . extract . snd <$> M.elems bs
+    tRet <- case tbs of
+      [] -> Pure <$> freshType (Right Kind.Type)
+      [tRet] -> pure tRet
+      tRet : tRest -> do
+        -- Unify all the branches
+        mapM_ (pushCons . TyEq tRet) tRest
+        pure tRet
+    pure $ (tRet, ann) CF.:< LL.Match ae1 bs
+  where
+    goBranch ::
+      Ty' g ->
+      Maybe g ->
+      ([l], m (CF.Cofree (LL.Expr g l) (Ty' g, ann))) ->
+      m ([l], CF.Cofree (LL.Expr g l) (Free (Ty.Ty Kind' g) TyVar', ann))
+    goBranch t cn (xs, mae) = do
+      mc <- maybe (pure Nothing) lookupConstructor cn
+      (tc, txs) <- case mc of
+        Nothing -> pure (t, [])
+        Just (tc, txs) -> pure (tc, txs)
+
+      pushCons $ TyEq t tc
+
+      -- We just grab a fresh type when we get too many args
+      xtxs <-
+        zipWithM
+          ( \x mt ->
+              (x,)
+                <$> maybe (Pure <$> freshType (Right Kind.Type)) pure mt
+          )
+          xs
+          ((Just <$> txs) <> repeat Nothing)
+
+      (xs,)
+        <$> foldr
+          (uncurry pushLocal)
+          mae
+          xtxs
+
+lookupConstructor :: (Check g l m) => g -> m (Maybe (Ty' g, [Ty' g]))
+lookupConstructor c = asks (M.lookup c . envConstrs)
 
 unknownName :: (Check g l m) => m TyVar'
 unknownName = do
