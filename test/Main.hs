@@ -139,7 +139,7 @@ testLinearise =
 testLambdaLift :: TestTree
 testLambdaLift =
   testGroup
-    "Linearise"
+    "Lambda Lift"
     [ testExpected
         "id"
         ["abs", "x", ["local", "x"]]
