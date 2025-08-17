@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Control.Comonad.Cofree qualified as CF
+import Control.Monad.Reader (runReader)
 import Data.Text qualified as T
 import PFL.Compile.LambdaLift qualified as LambdaLift
 import PFL.Compile.Linearise qualified as Linearise
@@ -142,6 +143,7 @@ testLambdaLift =
     "Lambda Lift"
     [ testExpected
         "id"
+        []
         ["abs", "x", ["local", "x"]]
         [ "closure",
           ["global", "Unit"],
@@ -159,6 +161,7 @@ testLambdaLift =
         ],
       testExpected
         "Simple closure"
+        [Q.Named "f"]
         ["abs", "x", [["local", "f"], ["local", "x"]]]
         [ "closure",
           ["local", "f"],
@@ -173,6 +176,7 @@ testLambdaLift =
         ],
       testExpected
         "Close-over 2"
+        [Q.Named "y", Q.Named "f"]
         ["abs", "x", [[["local", "f"], ["local", "x"]], ["local", "y"]]]
         [ "closure",
           [[["global", "Pair"], ["local", "f"]], ["local", "y"]],
@@ -193,6 +197,7 @@ testLambdaLift =
         ],
       testExpected
         "Close-over 3"
+        [Q.Named "z", Q.Named "y", Q.Named "f"]
         ["abs", "x", [[[["local", "f"], ["local", "x"]], ["local", "y"]], ["local", "z"]]]
         [ "closure",
           [[["global", "Pair"], ["local", "f"]], [[["global", "Pair"], ["local", "y"]], ["local", "z"]]],
@@ -222,7 +227,7 @@ testLambdaLift =
       closureOrderTest ("y", "x") ("y", "x")
     ]
   where
-    testExpected name inptStr expectedStr = testCase name $ do
+    testExpected name ctx inptStr expectedStr = testCase name $ do
       inpt :: QExpr <- Sexp.fromFail inptStr
       expected :: LExpr <- Sexp.fromFail expectedStr
       let nms =
@@ -230,7 +235,7 @@ testLambdaLift =
               { nmPair = "Pair",
                 nmUnit = "Unit"
               }
-      let outpt = LambdaLift.lambdaLift nms $ Q.anonymise inpt
+      let outpt = flip runReader ctx $ LambdaLift.lambdaLift' nms $ Q.anonymise inpt
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> pure ()
         Left err -> fail (T.unpack err)
@@ -238,6 +243,7 @@ testLambdaLift =
     closureOrderTest (x1, x2) (y1, y2) =
       testExpected
         ("Curry order: \\" <> show (x1, x2) <> " -> " <> show (y1, y2))
+        []
         ["abs", x1, ["abs", x2, ["abs", "z", [[["local", y1], ["local", y2]], ["local", "z"]]]]]
         [ "closure",
           ["global", "Unit"],
