@@ -1,7 +1,8 @@
 module PFL.Typing.Collect
   ( Globals (..),
-    emptyEnv,
-    emptyState,
+    Collected (..),
+    Issue (..),
+    Constraint (..),
     collect,
   )
 where
@@ -10,6 +11,7 @@ import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree qualified as CFT
 import Control.Monad.Free (Free (..))
+import Control.Monad.RWS (evalRWS)
 import Control.Monad.RWS.Class (MonadRWS, asks, local, state, tell)
 import Data.Functor.Foldable (cataA)
 import Data.Map qualified as M
@@ -112,8 +114,15 @@ emptyState =
       stFreshKind = Ext 0
     }
 
-collect :: (Collect g g' l ann m) => LExpr g l ann -> m (AExpr g' l ann)
-collect = cataA $ \case
+collect ::
+  (Ord ann, Ord l, Ord g, Ord g') =>
+  Globals g g' ->
+  LExpr g l ann ->
+  (AExpr g' l ann, Collected g g' l ann)
+collect gbs e = evalRWS (collect' e) (emptyEnv gbs) emptyState
+
+collect' :: (Collect g g' l ann m) => LExpr g l ann -> m (AExpr g' l ann)
+collect' = cataA $ \case
   ann CFT.:< LL.Local x ->
     withAnns (S.singleton ann) $
       asks (M.lookup x . envLocals) >>= \case
