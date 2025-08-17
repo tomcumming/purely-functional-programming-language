@@ -33,7 +33,7 @@ library
         PFL.Expr.In
         PFL.Expr.LambdaLifted
         PFL.Expr.Qualified
-        PFL.Typing.Check
+        PFL.Typing.Collect
         PFL.Typing.Kind
         PFL.Typing.Type
 
