@@ -216,7 +216,10 @@ testLambdaLift =
               ]
             ]
           ]
-        ]
+        ],
+      closureOrderTest ("x", "y") ("x", "y"),
+      closureOrderTest ("y", "x") ("x", "y"),
+      closureOrderTest ("y", "x") ("y", "x")
     ]
   where
     testExpected name inptStr expectedStr = testCase name $ do
@@ -231,3 +234,51 @@ testLambdaLift =
       case Sexp.unify (Sexp.into outpt) (Sexp.into expected) of
         Right () -> pure ()
         Left err -> fail (T.unpack err)
+
+    closureOrderTest (x1, x2) (y1, y2) =
+      testExpected
+        ("Curry order: \\" <> show (x1, x2) <> " -> " <> show (y1, y2))
+        ["abs", x1, ["abs", x2, ["abs", "z", [[["local", y1], ["local", y2]], ["local", "z"]]]]]
+        [ "closure",
+          ["global", "Unit"],
+          x1,
+          [ "match",
+            ["local", x1],
+            [ ["just", "Pair"],
+              ["0x", x1],
+              [ "match",
+                ["local", "0x"],
+                [ ["just", "Unit"],
+                  [],
+                  [ "closure",
+                    ["local", x1],
+                    x2,
+                    [ "match",
+                      ["local", x2],
+                      [ ["just", "Pair"],
+                        [x1, x2],
+                        [ "closure",
+                          [[["global", "Pair"], ["local", x1]], ["local", x2]],
+                          "z",
+                          [ "match",
+                            ["local", "z"],
+                            [ ["just", "Pair"],
+                              ["0x", "z"],
+                              [ "match",
+                                ["local", "0x"],
+                                [ ["just", "Pair"],
+                                  [x1, x2],
+                                  [[["local", y1], ["local", y2]], ["local", "z"]]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
