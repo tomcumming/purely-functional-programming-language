@@ -17,6 +17,7 @@
           (upkgs.haskell-language-server.override { supportedGhcVersions = [ "9122" ]; })
           upkgs.haskell.compiler.ghc9122
           upkgs.cabal-install
+          pkgs.ormolu
         ];
       };
       formatter."${system}" = pkgs.nixpkgs-fmt;

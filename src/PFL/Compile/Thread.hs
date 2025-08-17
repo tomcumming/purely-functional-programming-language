@@ -40,7 +40,10 @@ data Threading = Simple | Threaded deriving (Eq)
 thread' ::
   forall g l ann m.
   (Ord g, MonadState Word m) =>
-  Names g -> Q.Local l -> QExpr g l ann -> m (QExpr g l ann)
+  Names g ->
+  Q.Local l ->
+  QExpr g l ann ->
+  m (QExpr g l ann)
 thread' Names {nmPair, nmThread} w =
   cataA alg >=> \case
     (Simple, e) -> pure $ pairWithCtx e
