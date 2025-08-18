@@ -10,11 +10,14 @@ where
 import Control.Comonad (extract)
 import Control.Comonad.Cofree qualified as CF
 import Control.Comonad.Trans.Cofree qualified as CFT
+import Control.Monad (unless)
 import Control.Monad.Free (Free (..))
 import Control.Monad.RWS (evalRWS)
 import Control.Monad.RWS.Class (MonadRWS, asks, local, state, tell)
+import Data.Foldable (traverse_)
 import Data.Functor.Foldable (cataA)
 import Data.Map qualified as M
+import Data.Maybe (isNothing)
 import Data.Set qualified as S
 import PFL.Expr.LambdaLifted qualified as LL
 import PFL.Typing.Kind (Kind)
@@ -39,7 +42,7 @@ data Globals g g' = Globals
   { gblUnknown :: g',
     gblClosure :: g',
     gblPair :: g',
-    gblConstrs :: M.Map g (Ty' g', [Ty' g']), -- These should actually be some solved type
+    gblConstrs :: M.Map g (g', Ty' g', [Ty' g']), -- These should actually be some solved type
     gblNamed :: M.Map g (g', Ty' g') -- as should these
   }
 
@@ -58,11 +61,12 @@ data St = St
 data Issue g l
   = UnknownLocal l TyVar'
   | UnknownGlobal g TyVar'
+  | ConstrArity (Maybe g)
   deriving (Eq, Ord, Show)
 
 data Constraint g'
   = TyKind (Ty' g') Kind'
-  | TyEq (Ty' g')
+  | TyEq (Ty' g') (Ty' g')
   | KindEq Kind' Kind'
   deriving (Eq, Ord, Show)
 
@@ -121,7 +125,11 @@ collect ::
   (AExpr g' l ann, Collected g g' l ann)
 collect gbs e = evalRWS (collect' e) (emptyEnv gbs) emptyState
 
-collect' :: (Collect g g' l ann m) => LExpr g l ann -> m (AExpr g' l ann)
+collect' ::
+  forall g g' l ann m.
+  (Collect g g' l ann m) =>
+  LExpr g l ann ->
+  m (AExpr g' l ann)
 collect' = cataA $ \case
   ann CFT.:< LL.Local x ->
     withAnns (S.singleton ann) $
@@ -154,6 +162,71 @@ collect' = cataA $ \case
     let tRet = fst $ extract eRet
     t <- typeClosure tCtx tArg tRet
     pure $ (t, ann) CF.:< LL.Closure eCtx x eRet
+  ann CFT.:< LL.Ap me1 me2 -> do
+    ae1 <- me1
+    let t1 = fst $ extract ae1
+    ae2 <- me2
+    let t2 = fst $ extract ae2
+    tCtx <- Pure <$> freshType (Right Kind.Type)
+    tArg <- Pure <$> freshType (Right Kind.Type)
+    tRet <- Pure <$> freshType (Right Kind.Type)
+    tCls <- typeClosure tCtx tArg tRet
+    tellCons $ TyEq t1 tCls
+    tellCons $ TyEq t2 tArg
+    pure $ (tRet, ann) CF.:< LL.Ap ae1 ae2
+  ann CFT.:< LL.Match me1 mbs -> do
+    ae1 <- me1
+    let t1 = fst $ extract ae1
+    bs <- M.fromList <$> traverse (uncurry (goBranch t1)) (M.toList mbs)
+    let tbs = fst . extract . snd <$> M.elems bs
+    tRet <- case tbs of
+      [] -> Pure <$> freshType (Right Kind.Type)
+      [tRet] -> pure tRet
+      tRet : tRest -> do
+        -- Unify all the branches
+        mapM_ (tellCons . TyEq tRet) tRest
+        pure tRet
+    pure $ (tRet, ann) CF.:< LL.Match ae1 bs
+    where
+      goBranch ::
+        Ty' g' ->
+        Maybe g ->
+        ([l], m (CF.Cofree (LL.Expr g' l) (Ty' g', ann))) ->
+        m (Maybe g', ([l], CF.Cofree (LL.Expr g' l) (Free (Ty.Ty Kind' g') TyVar', ann)))
+      goBranch t1 cn (xs, me) = do
+        -- TODO check dups in xs?
+
+        -- Constr name, type of fully applied cnstr, type of args
+        (c', tc, mtas) <- case cn of
+          Nothing -> pure (Nothing, Nothing, Just [])
+          Just c ->
+            asks (M.lookup c . gblConstrs . envGlobals) >>= \case
+              Nothing -> do
+                c' <- asks $ gblUnknown . envGlobals
+                t <- freshType (Right Kind.Type)
+                tellIssue $ UnknownGlobal c t
+                pure (Just c', Nothing, Nothing)
+              Just (c', tc, tas) -> pure (Just c', Just tc, Just tas)
+
+        ae <- case mtas of
+          Just tas
+            | length tas == length xs ->
+                foldr
+                  (uncurry pushLocal)
+                  me
+                  (zip xs tas)
+          _ -> do
+            unless (isNothing mtas) $ tellIssue $ ConstrArity cn
+            foldr
+              ( \x ae -> do
+                  t <- Pure <$> freshType (Right Kind.Type)
+                  pushLocal x t ae
+              )
+              me
+              xs
+
+        traverse_ (tellCons . TyEq t1) tc
+        pure (c', (xs, ae))
 
 pushLocal :: (Collect g g' l ann m) => l -> Ty' g' -> m a -> m a
 pushLocal x t = local $ \env ->
