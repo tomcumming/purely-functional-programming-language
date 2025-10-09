@@ -26,16 +26,6 @@ library
     import: shared
     hs-source-dirs: src
     exposed-modules:
-        PFL.Compile.LambdaLift
-        PFL.Compile.Linearise
-        PFL.Compile.Qualify
-        PFL.Compile.Thread
-        PFL.Expr.In
-        PFL.Expr.LambdaLifted
-        PFL.Expr.Qualified
-        PFL.Typing.Collect
-        PFL.Typing.Kind
-        PFL.Typing.Type
 
 test-suite purely-functional-test
     import: shared
@@ -43,7 +33,9 @@ test-suite purely-functional-test
     type: exitcode-stdio-1.0
     hs-source-dirs: test
     main-is: Main.hs
-    other-modules: Test.Sexp
+    other-modules:
+        Test.Sexp
+        Theory.FunctionNotation
     build-depends:
         purely-functional,
         tasty,
