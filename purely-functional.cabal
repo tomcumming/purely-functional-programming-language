@@ -26,6 +26,9 @@ library
     import: shared
     hs-source-dirs: src
     exposed-modules:
+        PF.Compile.Linearise
+        PF.Expr.Qualified
+        PF.Expr.QualNamed
 
 test-suite purely-functional-test
     import: shared
@@ -35,6 +38,7 @@ test-suite purely-functional-test
     main-is: Main.hs
     other-modules:
         Test.Sexp
+        Test.Sexp.Expr
         Theory.FunctionNotation
     build-depends:
         purely-functional,
