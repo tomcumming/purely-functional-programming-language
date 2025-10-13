@@ -2,11 +2,13 @@ module Test.Sexp
   ( Sexp (..),
     Into (..),
     From (..),
+    showSexp,
     fromFail,
     unify,
   )
 where
 
+import Control.Category ((>>>))
 import Control.Monad (zipWithM_)
 import Data.Bifunctor (first)
 import Data.List qualified as L
@@ -34,8 +36,8 @@ instance IsList Sexp where
     Lst ss -> ss
     Atom {} -> error "Can't toList an Atom"
 
-showText :: (Show a) => a -> T.Text
-showText = T.pack . show
+showSexp :: (Show a) => a -> Sexp
+showSexp = T.show >>> Atom
 
 fromFail :: (MonadFail m, From a) => Sexp -> m a
 fromFail = either (fail . T.unpack) pure . from
@@ -49,9 +51,9 @@ unify = curry $ \case
               Left $
                 T.unwords
                   [ "args length",
-                    showText (length xs),
+                    T.show (length xs),
                     "/=",
-                    showText (length ys)
+                    T.show (length ys)
                   ]
           | otherwise = zipWithM_ unify xs ys
     first
@@ -59,11 +61,11 @@ unify = curry $ \case
           T.unlines
             [ err,
               "in",
-              T.unwords [showText (Lst xs), "/=", showText (Lst ys)]
+              T.unwords [T.show (Lst xs), "/=", T.show (Lst ys)]
             ]
       )
       merr
-  (s1, s2) -> Left $ T.unwords [showText s1, "/=", showText s2]
+  (s1, s2) -> Left $ T.unwords [T.show s1, "/=", T.show s2]
 
 class Into a where
   into :: a -> Sexp
@@ -88,15 +90,15 @@ class From a where
 instance From T.Text where
   from = \case
     Atom s -> pure s
-    e -> Left $ "Expected text: " <> showText e
+    e -> Left $ "Expected text: " <> T.show e
 
 instance (From a) => From (Maybe a) where
   from = \case
     "nothing" -> pure Nothing
     Lst ["just", e] -> Just <$> from e
-    e -> Left $ "Expected Maybe: " <> showText e
+    e -> Left $ "Expected Maybe: " <> T.show e
 
 instance (From a) => From [a] where
   from = \case
     Lst xs -> traverse from xs
-    e -> Left $ "Expected list: " <> showText e
+    e -> Left $ "Expected list: " <> T.show e

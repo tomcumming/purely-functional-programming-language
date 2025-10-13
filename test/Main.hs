@@ -1,9 +1,16 @@
 module Main (main) where
 
+import Control.Category ((>>>))
 import Control.Comonad.Cofree qualified as CF
+import Control.Comonad.Trans.Cofree qualified as CFF
+import Control.Monad (forM_)
+import Data.Fix (Fix (Fix))
+import Data.Function ((&))
+import Data.Functor.Foldable (cata)
 import Data.Text qualified as T
 import PF.Compile.Linearise qualified as Linearise
-import PF.Expr.Qualified as Q
+import Test.Sexp qualified as Sexp
+import Test.Sexp.Expr ()
 
 names :: Linearise.Names T.Text
 names =
@@ -14,51 +21,28 @@ names =
       nameDrop = "drop"
     }
 
-test1 :: CF.Cofree (Q.Expr T.Text) ()
-test1 =
-  ()
-    CF.:< Q.Abs
-      ( ()
-          CF.:< Q.Ap
-            (() CF.:< Q.Local (toEnum 0))
-            (() CF.:< Q.Local (toEnum 0))
-      )
+test1 :: Sexp.Sexp
+test1 = ["lambda", ["i0", "i0"]]
 
-test2 :: CF.Cofree (Expr T.Text) ()
-test2 = () CF.:< Q.Abs (() CF.:< Q.Global "hi")
+test2 :: Sexp.Sexp
+test2 = ["lambda", "hi"]
 
-test3 :: CF.Cofree (Q.Expr T.Text) ()
-test3 =
-  ()
-    CF.:< Q.Abs
-      ( ()
-          CF.:< Q.Abs
-            ( ()
-                CF.:< Q.Ap
-                  (() CF.:< Q.Local (toEnum 1))
-                  (() CF.:< Q.Local (toEnum 1))
-            )
-      )
+test3 :: Sexp.Sexp
+test3 = ["lambda", ["lambda", ["i1", "i1"]]]
+
+cf2fix :: (Functor f) => CF.Cofree f a -> Fix f
+cf2fix = cata (CFF.tailF >>> Fix)
+
+fix2cf :: (Functor f) => Fix f -> CF.Cofree f ()
+fix2cf = cata (() CF.:<)
 
 main :: IO ()
 main = do
-  print test3
-  let test3' = Linearise.getLinearExpr $ Linearise.linearise names test3
-  print test3'
-
-{-
-
-() :< Abs
-  (() :< Match
-    (() :< Ap (() :< Global "drop") (() :< Local i0))
-    (("Unit",0),() :< Global "hi")
-    Nothing)
-
-() :< Abs
-  (() :< Match
-    (() :< Ap
-      (() :< Global "copy")
-      (() :< Local i0))
-    (("Tuple",2),() :< Ap (() :< Local i0) (() :< Local i1))
-    Nothing)
--}
+  forM_ ([test1, test2, test3] :: [Sexp.Sexp]) $ \test -> do
+    print test
+    e <-
+      Sexp.from test
+        & either (T.unpack >>> fail) (fix2cf >>> pure)
+    let e' = Linearise.getLinearExpr $ Linearise.linearise names e
+    print $ Sexp.into $ cf2fix e'
+    putStrLn ""

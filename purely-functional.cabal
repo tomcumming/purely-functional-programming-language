@@ -43,4 +43,5 @@ test-suite purely-functional-test
     build-depends:
         purely-functional,
         tasty,
-        tasty-hunit
+        tasty-hunit,
+        data-fix
