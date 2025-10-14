@@ -78,5 +78,5 @@ shrinkFrees :: Word -> S.Set Q.Idx -> S.Set Q.Idx
 shrinkFrees n =
   S.toAscList
     >>> filter (fromEnum >>> (>= fromIntegral n))
-    >>> fmap (fromEnum >>> (`subtract` fromIntegral n) >>> toEnum)
+    >>> fmap (fromEnum >>> subtract (fromIntegral n) >>> toEnum)
     >>> S.fromAscList
