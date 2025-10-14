@@ -1,8 +1,10 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Test.Sexp.Expr () where
+module Test.Sexp.Expr (cf2fix, fix2cf) where
 
 import Control.Category ((>>>))
+import Control.Comonad.Cofree qualified as CF
+import Control.Comonad.Trans.Cofree (tailF)
 import Control.Monad (forM)
 import Data.Fix (Fix (Fix))
 import Data.Functor.Foldable (cata)
@@ -12,6 +14,12 @@ import GHC.IsList qualified as IsList
 import PF.Expr.Qualified qualified as Q
 import Test.Sexp qualified as Sexp
 import Text.Read (readMaybe)
+
+cf2fix :: (Functor f) => CF.Cofree f a -> Fix f
+cf2fix = cata (tailF >>> Fix)
+
+fix2cf :: (Functor f) => Fix f -> CF.Cofree f ()
+fix2cf = cata (() CF.:<)
 
 instance (Sexp.Into g) => Sexp.Into (Fix (Q.Expr g)) where
   into = cata $ \case

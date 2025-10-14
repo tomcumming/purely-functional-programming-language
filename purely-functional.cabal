@@ -39,6 +39,8 @@ test-suite purely-functional-test
     hs-source-dirs: test
     main-is: Main.hs
     other-modules:
+        Test.PF.Linearise
+        Test.PF.LambdaLift
         Test.Sexp
         Test.Sexp.Expr
         Theory.FunctionNotation
