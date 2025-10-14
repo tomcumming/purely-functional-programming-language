@@ -26,7 +26,9 @@ library
     import: shared
     hs-source-dirs: src
     exposed-modules:
+        PF.Compile.LambdaLift
         PF.Compile.Linearise
+        PF.Expr.LambdaLifted
         PF.Expr.Qualified
         PF.Expr.QualNamed
 

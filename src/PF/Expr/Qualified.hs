@@ -1,4 +1,4 @@
-module PF.Expr.Qualified (Idx, Expr (..)) where
+module PF.Expr.Qualified (Idx, Expr (..), growIdx) where
 
 import Control.Category ((>>>))
 import Data.Functor.Classes (Show1)
@@ -21,3 +21,6 @@ data Expr g a
   | Match a (M.Map (Maybe g) (Word, a))
   deriving stock (Show, Functor, Generic1)
   deriving (Show1) via FunctorClassesDefault (Expr g)
+
+growIdx :: Word -> Idx -> Idx
+growIdx n = fromEnum >>> (+ fromIntegral n) >>> toEnum
