@@ -30,7 +30,6 @@ library
         PF.Compile.Linearise
         PF.Expr.LambdaLifted
         PF.Expr.Qualified
-        PF.Expr.QualNamed
 
 test-suite purely-functional-test
     import: shared

@@ -1,4 +1,13 @@
-module PF.Compile.LambdaLift (lambdaLift) where
+module PF.Compile.LambdaLift
+  ( lambdaLift,
+    QExpr,
+    Ann,
+    annotateFree,
+    lookupVar,
+    growSubst,
+    shrinkFrees,
+  )
+where
 
 import Control.Category ((>>>))
 import Control.Comonad (extract)
@@ -43,11 +52,11 @@ lambdaLift' ::
   QExpr g (Ann ann) ->
   m (LExpr g ann)
 lambdaLift' = cata $ \((us, ann) CFF.:< inExpr) -> case inExpr of
-  Q.Local l -> lookupVar ann l
+  Q.Local l -> lookupVar' ann l
   Q.Global g -> pure $ ann CF.:< L.Global g
   Q.Abs me -> do
     e' <- local (substCls us >>> growSubst (S.size us + 1)) me
-    cls <- S.toList us & traverse (lookupVar ann)
+    cls <- S.toList us & traverse (lookupVar' ann)
     pure $ ann CF.:< L.Closure cls e'
   Q.Ap me1 me2 -> (ann CF.:<) <$> (L.Ap <$> me1 <*> me2)
   Q.Match me1 mbs -> do
@@ -55,24 +64,21 @@ lambdaLift' = cata $ \((us, ann) CFF.:< inExpr) -> case inExpr of
     bs <- forM mbs $ \(n, me) -> (n,) <$> local (growSubst (fromIntegral n)) me
     pure $ ann CF.:< L.Match e1 bs
   where
-    lookupVar :: ann -> Q.Idx -> m (LExpr g ann)
-    lookupVar ann =
-      fromEnum
-        >>> flip (Sq.!?)
-        >>> ( asks >=> \case
-                Nothing -> error "OOB"
-                Just l' -> pure $ ann CF.:< L.Local l'
-            )
-
-    growSubst :: Int -> Sq.Seq Q.Idx -> Sq.Seq Q.Idx
-    growSubst n =
-      fmap (Q.growIdx (fromIntegral n))
-        >>> (([0 .. pred n] & fmap toEnum & Sq.fromList) <>)
-
     substCls :: S.Set Q.Idx -> Sq.Seq Q.Idx -> Sq.Seq Q.Idx
     substCls us = fmap (\i -> s M.!? i & fromMaybe i)
       where
         s = zip (S.toList us) (toEnum @Q.Idx <$> [1 ..]) & M.fromList
+
+lookupVar :: (MonadReader (Sq.Seq Q.Idx) m) => Q.Idx -> m Q.Idx
+lookupVar = fromEnum >>> flip (Sq.!?) >>> (asks >=> maybe (error "OOB") pure)
+
+lookupVar' :: (MonadReader (Sq.Seq Q.Idx) m) => ann -> Q.Idx -> m (LExpr g ann)
+lookupVar' ann = lookupVar >=> (L.Local >>> (ann CF.:<) >>> pure)
+
+growSubst :: Int -> Sq.Seq Q.Idx -> Sq.Seq Q.Idx
+growSubst n =
+  fmap (Q.growIdx (fromIntegral n))
+    >>> (([0 .. pred n] & fmap toEnum & Sq.fromList) <>)
 
 shrinkFrees :: Word -> S.Set Q.Idx -> S.Set Q.Idx
 shrinkFrees n =
