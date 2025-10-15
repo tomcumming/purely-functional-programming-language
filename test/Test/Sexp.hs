@@ -2,19 +2,22 @@ module Test.Sexp
   ( Sexp (..),
     Into (..),
     From (..),
-    showSexp,
+    parse,
+    showAtom,
     fromFail,
     unify,
   )
 where
 
 import Control.Category ((>>>))
-import Control.Monad (zipWithM_)
+import Control.Monad (void, zipWithM_)
 import Data.Bifunctor (first)
+import Data.Char (isSpace)
+import Data.Function ((&))
 import Data.List qualified as L
-import Data.String (IsString, fromString)
 import Data.Text qualified as T
-import GHC.IsList (IsList, Item, fromList, toList)
+import Text.ParserCombinators.ReadP qualified as R
+import Text.Read (readEither)
 
 data Sexp
   = Atom T.Text
@@ -24,20 +27,32 @@ data Sexp
 instance Show Sexp where
   show = \case
     Atom t -> T.unpack t
-    Lst ss -> "[" <> L.unwords (show <$> ss) <> "]"
+    Lst ss -> "(" <> L.unwords (show <$> ss) <> ")"
 
-instance IsString Sexp where
-  fromString = Atom . T.pack
+instance Read Sexp where
+  readsPrec _ = R.readP_to_S sexpReadP
 
-instance IsList Sexp where
-  type Item Sexp = Sexp
-  fromList = Lst
-  toList = \case
-    Lst ss -> ss
-    Atom {} -> error "Can't toList an Atom"
+sexpReadP :: R.ReadP Sexp
+sexpReadP =
+  R.skipSpaces >> R.look >>= \case
+    '(' : _ -> do
+      void $ R.char '('
+      ss <- R.many sexpReadP
+      R.skipSpaces
+      void $ R.char ')'
+      pure $ Lst ss
+    _ -> Atom . T.pack <$> R.munch1 atom
+  where
+    atom = \case
+      ')' -> False
+      '(' -> False
+      c -> isSpace c & not
 
-showSexp :: (Show a) => a -> Sexp
-showSexp = T.show >>> Atom
+parse :: (MonadFail m) => T.Text -> m Sexp
+parse = T.unpack >>> readEither >>> either fail pure
+
+showAtom :: (Show a) => a -> Sexp
+showAtom = T.show >>> Atom
 
 fromFail :: (MonadFail m, From a) => Sexp -> m a
 fromFail = either (fail . T.unpack) pure . from
@@ -81,8 +96,8 @@ instance (Into a) => Into [a] where
 
 instance (Into a) => Into (Maybe a) where
   into = \case
-    Nothing -> "nothing"
-    Just x -> Lst ["just", into x]
+    Nothing -> Atom "nothing"
+    Just x -> Lst [Atom "just", into x]
 
 class From a where
   from :: Sexp -> Either T.Text a
@@ -94,8 +109,8 @@ instance From T.Text where
 
 instance (From a) => From (Maybe a) where
   from = \case
-    "nothing" -> pure Nothing
-    Lst ["just", e] -> Just <$> from e
+    Atom "nothing" -> pure Nothing
+    Lst [Atom "just", e] -> Just <$> from e
     e -> Left $ "Expected Maybe: " <> T.show e
 
 instance (From a) => From [a] where
