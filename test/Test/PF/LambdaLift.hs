@@ -16,7 +16,7 @@ type QExpr = Q.Expr T.Text
 tests :: TestTree
 tests =
   testGroup
-    "Linearise"
+    "Lambda Lift"
     [ testId,
       testSimple1,
       testSimple2,
