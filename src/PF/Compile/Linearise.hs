@@ -78,10 +78,11 @@ extractFrees = extract >>> fst
 
 substCopy :: S.Set Q.Idx -> Int -> Sq.Seq Q.Idx -> Sq.Seq Q.Idx
 substCopy is off =
-  let s =
+  let d = S.size is * 2 & fromIntegral
+      s =
         zip (fromEnum <$> S.toAscList is) [toEnum $ o * 2 + off | o <- [0 ..]]
           & M.fromList
-   in Sq.mapWithIndex (\i i' -> s M.!? i & fromMaybe i')
+   in Sq.mapWithIndex (\i i' -> s M.!? i & fromMaybe (Q.growIdx d i'))
 
 doDrop :: Names g -> ann -> S.Set Q.Idx -> Q.Idx -> QExpr g ann -> QExpr g ann
 doDrop Names {nameDrop, nameUnit} ann us l e
