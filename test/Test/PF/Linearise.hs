@@ -29,7 +29,8 @@ tests =
     "Linearise"
     [ testSimpleCopy,
       testSimpleDrop,
-      testSimpleDropCopy
+      testSimpleDropCopy,
+      testCopyAndFrees
     ]
 
 testExpected :: TestName -> T.Text -> T.Text -> TestTree
@@ -60,3 +61,10 @@ testSimpleDropCopy =
     "Simple Drop & Copy"
     "(lambda (lambda (i1 i1)))"
     "(lambda (lambda (match (drop i0) (Unit 0 (match (copy i1) (Tuple 2 (i0 i1)))))))"
+
+testCopyAndFrees :: TestTree
+testCopyAndFrees =
+  testExpected
+    "\\x y -> (i1 i0) i0"
+    "(lambda (lambda ((i1 i0) i0)))"
+    "(lambda (lambda (match (copy i0) (Tuple 2 ((i3 i0) i1)))))"
