@@ -10,26 +10,32 @@ common shared
         DerivingVia,
         LambdaCase,
         OverloadedStrings,
-        RecordWildCards
+        RecordWildCards,
+        TypeFamilies,
     build-depends:
         base ^>=4.21.0.0,
-        text,
-        containers,
-        mtl,
         comonad,
-        transformers-compat,
-        recursion-schemes,
+        containers,
+        data-fix,
         free,
-        optics
+        mtl,
+        optics,
+        recursion-schemes,
+        text,
+        transformers-compat,
 
 library
     import: shared
     hs-source-dirs: src
     exposed-modules:
+        PF.Check.Constraint
+        PF.Check.Type
+        PF.Check.Unify
         PF.Compile.LambdaLift
         PF.Compile.Linearise
         PF.Expr.LambdaLifted
         PF.Expr.Qualified
+        PF.Expr.Typed
 
 test-suite purely-functional-test
     import: shared
@@ -47,4 +53,3 @@ test-suite purely-functional-test
         purely-functional,
         tasty,
         tasty-hunit,
-        data-fix
