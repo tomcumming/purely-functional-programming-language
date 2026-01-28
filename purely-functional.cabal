@@ -24,11 +24,15 @@ library
     import: shared
     hs-source-dirs: src
     exposed-modules:
+        PF.Check.Kind
+        PF.Check.Subst
+        PF.Check.Type
+        PF.Check.Unify
+        PF.Compile.LambdaLift
+        PF.Compile.Linearise
         PF.Expr.In
         PF.Expr.LambdaLifted
         PF.Expr.Linearised
-        PF.Compile.LambdaLift
-        PF.Compile.Linearise
 
 test-suite purely-functional-test
     import: shared
