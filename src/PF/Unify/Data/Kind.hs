@@ -1,4 +1,4 @@
-module PF.Check.Kind (KindF (..)) where
+module PF.Unify.Data.Kind (KindF (..)) where
 
 import Data.Functor.Classes (Eq1, Show1)
 import Data.Functor.Classes.Generic (FunctorClassesDefault (..))

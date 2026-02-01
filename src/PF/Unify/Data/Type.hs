@@ -1,4 +1,4 @@
-module PF.Check.Type
+module PF.Unify.Data.Type
   ( Idx,
     TyF (..),
   )
