@@ -1,13 +1,15 @@
 module PF.Unify.Subst
-  ( Subst (substKndLvl, substTyLvl),
+  ( Subst (substKndLvl, substTy),
     applyKnd,
     applyTy,
     lookupKind,
     solveKnd,
     solveTy,
+    pushUnsolvedTy,
   )
 where
 
+import Control.Category ((>>>))
 import Control.Monad.Free (Free (..))
 import Control.Monad.Trans.Free qualified as TF
 import Data.Function ((&))
@@ -18,8 +20,7 @@ import PF.Unify.Data.Env (ExtK, ExtT, Knd, Lvl, Ty)
 
 data Subst c = Subst
   { substKndLvl :: M.Map ExtK Lvl,
-    substTyLvl :: M.Map ExtT Lvl,
-    substTyKnd :: M.Map ExtT Knd,
+    substTy :: M.Map ExtT (Lvl, Knd),
     substSolvedKnd :: M.Map ExtK Knd,
     substSolvedTy :: M.Map ExtT (Ty c)
   }
@@ -37,9 +38,9 @@ applyTy = flip $ \Subst {substSolvedTy} -> cata $ \case
 
 lookupKind :: ExtT -> Subst c -> Knd
 lookupKind x s =
-  substTyKnd s M.!? x & \case
+  substTy s M.!? x & \case
     Nothing -> error "Internal error: Unknown type ext"
-    Just k -> applyKnd k s
+    Just (_l, k) -> applyKnd k s
 
 -- | This MUST be checked by caller
 solveKnd :: ExtK -> Knd -> Subst c -> Subst c
@@ -54,3 +55,8 @@ solveTy x t s =
   s
     { substSolvedTy = M.insert x t (substSolvedTy s)
     }
+
+pushUnsolvedTy :: Lvl -> Knd -> Subst c -> (ExtT, Subst c)
+pushUnsolvedTy l k s =
+  let x = substTy s & M.lookupMax & maybe (toEnum 0) (fst >>> succ)
+   in (x, s {substTy = M.insert x (l, k) (substTy s)})

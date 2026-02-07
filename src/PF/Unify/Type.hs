@@ -2,6 +2,7 @@ module PF.Unify.Type
   ( Problem (..),
     Env (..),
     unifyTy,
+    unifyTy',
   )
 where
 
@@ -108,9 +109,9 @@ unifyTyKnd t1 t2 = unifyKnd' <$> inferKnd t1 <*> inferKnd t2 & join
 
 tyExtLvl :: (MonadState (Subst c) m) => ExtT -> m Lvl
 tyExtLvl x =
-  gets (Subst.substTyLvl >>> (M.!? x)) >>= \case
+  gets (Subst.substTy >>> (M.!? x)) >>= \case
     Nothing -> error "Internal error: Unknown ty level"
-    Just l -> pure l
+    Just (l, _k) -> pure l
 
 tyLvl ::
   (MonadState (Subst c) m) =>

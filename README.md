@@ -1,2 +1,2 @@
-Will be a purely functional language. Half the expressiveness of Haskell, half
-the speed of Rust.
+This is an experimental purely-functional, linear programming language with no
+runtime and very little boxing/heap-allocations.

@@ -50,7 +50,9 @@ unifyKnd' =
       >=> bitraverse markSkol markSkol
       >=> \case
         (TF.Pure (x, _), TF.Pure (y, _)) | x == y -> pure ()
-        (TF.Free Knd.Ty, TF.Free Knd.Ty) -> pure ()
+        (TF.Free Knd.Sta, TF.Free Knd.Sta) -> pure ()
+        (TF.Free Knd.Dyn, TF.Free Knd.Dyn) -> pure ()
+        (TF.Free (Knd.Val k1), TF.Free (Knd.Val k2)) -> unifyKnd' k1 k2
         (TF.Free (Knd.Arr k11 k12), TF.Free (Knd.Arr k21 k22)) ->
           unifyKnd' k11 k21 >> unifyKnd' k12 k22
         (TF.Pure (x, False), k2) -> trySolveVar x k2
