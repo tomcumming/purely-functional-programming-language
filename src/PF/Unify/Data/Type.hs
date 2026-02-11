@@ -4,7 +4,7 @@ module PF.Unify.Data.Type
   )
 where
 
-import Data.Functor.Classes (Show1)
+import Data.Functor.Classes (Eq1, Ord1, Show1)
 import Data.Functor.Classes.Generic (FunctorClassesDefault (..))
 import GHC.Generics (Generic1)
 
@@ -15,5 +15,5 @@ data TyF k c a
   | Con c
   | For k a
   | Ap a a
-  deriving (Generic1, Functor, Foldable, Traversable, Show)
-  deriving (Show1) via FunctorClassesDefault (TyF k c)
+  deriving (Generic1, Functor, Foldable, Traversable, Eq, Ord, Show)
+  deriving (Eq1, Ord1, Show1) via FunctorClassesDefault (TyF k c)

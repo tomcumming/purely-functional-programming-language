@@ -10,7 +10,19 @@ import Data.Function ((&))
 import Data.Functor.Foldable (cata)
 import Data.Map.Strict qualified as M
 import Data.Sequence qualified as Sq
-import PF.Unify.Data.Env (Env, Knd, Problem (Unknown), Ty, currentLvl, envKnd, envTy, pushVar)
+import PF.Unify.Data.Env
+  ( Env,
+    Knd,
+    Primitives (..),
+    Problem (Unknown),
+    Ty,
+    currentLvl,
+    envKnd,
+    envPrims,
+    envTy,
+    pushVar,
+    pattern (:->),
+  )
 import PF.Unify.Data.Kind qualified as Knd
 import PF.Unify.Data.Type qualified as Ty
 import PF.Unify.Kind (unifyKnd')
@@ -41,7 +53,16 @@ inferKnd = cata $ \case
       Just k -> pure k
   TF.Free (Ty.Con c) ->
     asks (envTy >>> (M.!? c)) >>= \case
-      Nothing -> throwError Unknown
+      Nothing -> do
+        Primitives {primRowNil, primRowCons} <- asks envPrims
+        case () of
+          () | c == primRowNil -> Free Knd.Row & pure
+          ()
+            | c == primRowCons ->
+                Free Knd.Sym
+                  :-> (Free (Knd.Val (Free Knd.Sta)) :-> Free Knd.Row)
+                  & pure
+          _ -> throwError Unknown
       Just k -> pure k
   TF.Free (Ty.For k mk) -> local (pushVar k) mk
   TF.Free (Ty.Ap mk1 mk2) -> do

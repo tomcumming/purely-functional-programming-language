@@ -6,14 +6,18 @@ module PF.Unify.Data.Env
     Knd,
     Ty,
     Problem (..),
+    Primitives (..),
     Env (..),
     pushVar,
     currentLvl,
+    pattern (:->),
+    pattern Con,
+    pattern (:$),
   )
 where
 
 import Control.Category ((>>>))
-import Control.Monad.Free (Free)
+import Control.Monad.Free (Free (..))
 import Data.Map.Strict qualified as M
 import Data.Sequence qualified as Sq
 import Data.Set qualified as S
@@ -40,11 +44,18 @@ data Problem
   | Unknown
   deriving (Show)
 
+data Primitives c = Primitives
+  { primRowCons :: c,
+    primRowNil :: c
+  }
+  deriving (Show)
+
 data Env c = Env
   { envSkolTy :: S.Set ExtT,
     envSkolKnd :: S.Set ExtK,
     envKnd :: Sq.Seq Knd,
-    envTy :: M.Map c Knd
+    envTy :: M.Map c Knd,
+    envPrims :: Primitives c
   }
   deriving (Show)
 
@@ -53,3 +64,12 @@ pushVar k env = env {envKnd = k Sq.<| envKnd env}
 
 currentLvl :: Env c -> Lvl
 currentLvl = envKnd >>> Sq.length >>> toEnum
+
+pattern (:->) :: Knd -> Knd -> Knd
+pattern a :-> b = Free (Knd.Arr a b)
+
+pattern Con :: c -> Ty c
+pattern Con c = Free (Ty.Con c)
+
+pattern (:$) :: Ty c -> Ty c -> Ty c
+pattern a :$ b = Free (Ty.Ap a b)

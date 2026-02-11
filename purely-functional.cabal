@@ -8,6 +8,7 @@ common shared
     default-extensions:
         DerivingVia,
         OverloadedStrings,
+        PatternSynonyms,
         RecordWildCards,
     build-depends:
         base,
