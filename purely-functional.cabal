@@ -26,11 +26,9 @@ library
     hs-source-dirs: src
     exposed-modules:
         PF.Check.Infer
-        PF.Compile.LambdaLift
-        PF.Compile.Linearise
+        PF.Compile.Expr
+        PF.Expr.Core
         PF.Expr.In
-        PF.Expr.LambdaLifted
-        PF.Expr.Linearised
         PF.Unify.Data.Env
         PF.Unify.Data.Kind
         PF.Unify.Data.Type
