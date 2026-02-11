@@ -39,13 +39,13 @@ push k v = O.over kvs (MM.cons k v)
 
 pop :: (Ord k) => k -> Row k v t -> Either t (v, Row k v t)
 pop k row@Row {rowKvs} =
-  MM.unconsKey k rowKvs & \case
+  O.preview (MM.minViewKey k) rowKvs & \case
     Nothing -> rowTail row & Left
     Just (v, rowKvs') -> Right (v, O.set kvs rowKvs' row)
 
 popMin :: (Ord k) => Row k v t -> Either t ((k, v), Row k v t)
 popMin row@Row {rowKvs, rowTail} =
-  MM.uncons rowKvs & \case
+  O.preview MM.minView rowKvs & \case
     Nothing -> Left rowTail
     Just (kv, rowKvs') -> Right (kv, O.set kvs rowKvs' row)
 

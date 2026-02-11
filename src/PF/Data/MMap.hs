@@ -1,7 +1,7 @@
 module PF.Data.MMap
   ( MMap,
-    uncons,
-    unconsKey,
+    minView,
+    minViewKey,
     cons,
     snoc,
     intersect,
@@ -10,9 +10,11 @@ module PF.Data.MMap
 where
 
 import Control.Category ((>>>))
+import Control.Monad ((>=>))
 import Data.Function ((&))
 import Data.Map.Strict qualified as M
 import Data.Sequence qualified as Seq
+import Optics qualified as O
 
 newtype MMap k v = MMap {getMap :: M.Map k (Seq.Seq v)}
   deriving newtype (Show)
@@ -28,34 +30,47 @@ seqNonEmpty s
   | Seq.null s = Nothing
   | otherwise = Just s
 
-uncons :: (Ord k) => MMap k v -> Maybe ((k, v), MMap k v)
-uncons (MMap mm) =
-  M.minViewWithKey mm >>= \case
-    ((k, v Seq.:<| vs), rest) -> do
-      Just
-        ( (k, v),
-          seqNonEmpty vs
-            & maybe id (M.insert k)
-            & (rest &)
-            & MMap
+minView :: (Ord k) => O.Prism' (MMap k v) ((k, v), MMap k v)
+minView =
+  O.prism'
+    ( uncurry
+        ( \(k, v) ->
+            getMap
+              >>> M.insertWith (<>) k (Seq.singleton v)
+              >>> MMap
         )
-    _ -> error "Internal error: empty Seq"
+    )
+    ( (getMap >>> M.minViewWithKey) >=> \case
+        ((k, v Seq.:<| vs), rest) ->
+          Just
+            ( (k, v),
+              seqNonEmpty vs
+                & maybe id (M.insert k)
+                & (rest &)
+                & MMap
+            )
+        _ -> error "Internal error: empty Seq"
+    )
 
-unconsKey :: (Ord k) => k -> MMap k v -> Maybe (v, MMap k v)
-unconsKey k (MMap mm) =
-  mm M.!? k >>= \case
-    (v Seq.:<| vs) ->
-      Just
-        ( v,
-          seqNonEmpty vs
-            & maybe (M.delete k) (M.insert k)
-            & (mm &)
-            & MMap
+minViewKey :: (Ord k) => k -> O.Prism' (MMap k v) (v, MMap k v)
+minViewKey k =
+  O.prism'
+    ( uncurry
+        ( \v ->
+            getMap
+              >>> M.insertWith (<>) k (Seq.singleton v)
+              >>> MMap
         )
-    _ -> error "Internal error: empty Seq"
+    )
+    ( \(MMap mm) ->
+        mm M.!? k >>= \case
+          (v Seq.:<| Seq.Empty) -> Just (v, M.delete k mm & MMap)
+          (v Seq.:<| vs) -> Just (v, M.insert k vs mm & MMap)
+          _ -> error "Internal error: empty Seq"
+    )
 
 cons :: (Ord k) => k -> v -> MMap k v -> MMap k v
-cons k v = getMap >>> M.insertWith (<>) k (Seq.singleton v) >>> MMap
+cons k v mm = O.review minView ((k, v), mm)
 
 snoc :: (Ord k) => MMap k v -> k -> v -> MMap k v
 snoc (MMap mm) k v =
@@ -63,7 +78,7 @@ snoc (MMap mm) k v =
     & MMap
 
 instance (Ord k) => Semigroup (MMap k v) where
-  m1 <> m2 = case uncons m2 of
+  m1 <> m2 = case O.preview minView m2 of
     Nothing -> m1
     Just ((k, v), m2') -> snoc m1 k v <> m2'
 
@@ -78,8 +93,8 @@ intersect ::
     MMap k v',
     MMap k (v, v')
   )
-intersect m1 m2 = case uncons m1 of
-  Just ((k, v1), m1') -> case unconsKey k m2 of
+intersect m1 m2 = case O.preview minView m1 of
+  Just ((k, v1), m1') -> case O.preview (minViewKey k) m2 of
     Nothing ->
       let (es1, es2, is) = intersect m1' m2
        in (cons k v1 es1, es2, is)
