@@ -27,6 +27,8 @@ library
     exposed-modules:
         PF.Check.Infer
         PF.Compile.Expr
+        PF.Data.MMap
+        PF.Data.Row
         PF.Expr.Core
         PF.Expr.In
         PF.Unify.Data.Env
