@@ -68,6 +68,8 @@ currentLvl = envKnd >>> Sq.length >>> toEnum
 pattern (:->) :: Knd -> Knd -> Knd
 pattern a :-> b = Free (Knd.Arr a b)
 
+infixr 9 :->
+
 pattern Con :: c -> Ty c
 pattern Con c = Free (Ty.Con c)
 

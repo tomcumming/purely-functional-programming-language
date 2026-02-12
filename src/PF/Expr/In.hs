@@ -12,5 +12,6 @@ import GHC.Generics (Generic1)
 data ExprF x a
   = Var x
   | Comp a a
+  | Lambda a
   deriving (Generic1, Functor, Show)
   deriving (Show1) via FunctorClassesDefault (ExprF x)

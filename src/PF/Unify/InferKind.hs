@@ -60,7 +60,9 @@ inferKnd = cata $ \case
           ()
             | c == primRowCons ->
                 Free Knd.Sym
-                  :-> (Free (Knd.Val (Free Knd.Sta)) :-> Free Knd.Row)
+                  :-> Free (Knd.Val (Free Knd.Sta))
+                  :-> Free Knd.Row
+                  :-> Free Knd.Row
                   & pure
           _ -> throwError Unknown
       Just k -> pure k
