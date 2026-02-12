@@ -1,10 +1,4 @@
-module PF.Unify.Type
-  ( Problem (..),
-    Env (..),
-    unifyTy,
-    unifyTy',
-  )
-where
+module PF.Unify.Type (unifyTy, unifyTy', freshTy) where
 
 import Control.Category ((>>>))
 import Control.Monad (join, unless, when, (>=>))

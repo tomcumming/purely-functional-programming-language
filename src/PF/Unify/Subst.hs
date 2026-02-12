@@ -16,6 +16,8 @@ import Data.Function ((&))
 import Data.Functor.Foldable (cata)
 import Data.Map.Strict qualified as M
 import Data.Maybe (fromMaybe)
+import GHC.Generics (Generic)
+import Optics qualified as O
 import PF.Unify.Data.Env (ExtK, ExtT, Knd, Lvl, Ty)
 
 data Subst c = Subst
@@ -24,7 +26,7 @@ data Subst c = Subst
     substSolvedKnd :: M.Map ExtK Knd,
     substSolvedTy :: M.Map ExtT (Ty c)
   }
-  deriving (Show)
+  deriving (Generic, Show)
 
 applyKnd :: Knd -> Subst c -> Knd
 applyKnd = flip $ \Subst {substSolvedKnd} -> cata $ \case
@@ -44,19 +46,13 @@ lookupKind x s =
 
 -- | This MUST be checked by caller
 solveKnd :: ExtK -> Knd -> Subst c -> Subst c
-solveKnd x k s =
-  s
-    { substSolvedKnd = M.insert x k (substSolvedKnd s)
-    }
+solveKnd x k = O.over (O.gfield @"substSolvedKnd") (M.insert x k)
 
 -- | This MUST be checked by caller
 solveTy :: ExtT -> Ty c -> Subst c -> Subst c
-solveTy x t s =
-  s
-    { substSolvedTy = M.insert x t (substSolvedTy s)
-    }
+solveTy x t = O.over (O.gfield @"substSolvedTy") (M.insert x t)
 
 pushUnsolvedTy :: Lvl -> Knd -> Subst c -> (ExtT, Subst c)
 pushUnsolvedTy l k s =
   let x = substTy s & M.lookupMax & maybe (toEnum 0) (fst >>> succ)
-   in (x, s {substTy = M.insert x (l, k) (substTy s)})
+   in (x, O.over (O.gfield @"substTy") (M.insert x (l, k)) s)

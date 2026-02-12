@@ -10,6 +10,7 @@ import Data.Function ((&))
 import Data.Functor.Foldable (cata)
 import Data.Map.Strict qualified as M
 import Data.Sequence qualified as Sq
+import Optics qualified as O
 import PF.Unify.Data.Env
   ( Env,
     Knd,
@@ -36,7 +37,7 @@ freshKnd = do
   lvl <- asks currentLvl
   state $ \s ->
     let x = substKndLvl s & M.lookupMax & maybe (toEnum 0) (fst >>> succ)
-     in (Pure x, s {substKndLvl = M.insert x lvl (substKndLvl s)})
+     in (Pure x, O.over (O.gfield @"substKndLvl") (M.insert x lvl) s)
 
 inferKnd ::
   (MonadState (Subst c) m) =>

@@ -21,6 +21,8 @@ import Control.Monad.Free (Free (..))
 import Data.Map.Strict qualified as M
 import Data.Sequence qualified as Sq
 import Data.Set qualified as S
+import GHC.Generics (Generic)
+import Optics qualified as O
 import PF.Unify.Data.Kind qualified as Knd
 import PF.Unify.Data.Type qualified as Ty
 
@@ -57,10 +59,10 @@ data Env c = Env
     envTy :: M.Map c Knd,
     envPrims :: Primitives c
   }
-  deriving (Show)
+  deriving (Generic, Show)
 
 pushVar :: Knd -> Env c -> Env c
-pushVar k env = env {envKnd = k Sq.<| envKnd env}
+pushVar k = O.over (O.gfield @"envKnd") (k Sq.<|)
 
 currentLvl :: Env c -> Lvl
 currentLvl = envKnd >>> Sq.length >>> toEnum

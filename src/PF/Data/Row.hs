@@ -12,6 +12,7 @@ module PF.Data.Row
 where
 
 import Data.Function ((&))
+import GHC.Generics (Generic)
 import Optics qualified as O
 import PF.Data.MMap (MMap)
 import PF.Data.MMap qualified as MM
@@ -20,13 +21,13 @@ data Row k v t = Row
   { rowKvs :: MMap k v,
     rowTail :: t
   }
-  deriving (Show)
+  deriving (Generic, Show)
 
 kvs :: O.Lens (Row k v t) (Row k' v' t) (MMap k v) (MMap k' v')
-kvs = O.lens rowKvs (\row rowKvs -> row {rowKvs})
+kvs = O.gfield @"rowKvs"
 
 rtail :: O.Lens (Row k v a) (Row k v t) a t
-rtail = O.lens rowTail (\row rowTail -> row {rowTail})
+rtail = O.gfield @"rowTail"
 
 empty :: (Ord k) => t -> Row k v t
 empty rowTail = Row {rowKvs = mempty, rowTail}
