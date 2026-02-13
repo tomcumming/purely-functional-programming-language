@@ -32,7 +32,7 @@ import PF.Unify.Data.Env
     Ty,
     currentLvl,
     pushVar,
-    pattern Con,
+    pattern Cn,
     pattern (:$),
   )
 import PF.Unify.Data.Kind qualified as Knd
@@ -169,9 +169,9 @@ freshTy k = do
 rowCons :: (Eq c) => Primitives c -> O.Prism' (Ty c) ((Ty c, Ty c), Ty c)
 rowCons Primitives {primRowCons} =
   O.prism'
-    (\((tl, tv), tt) -> ((Con primRowCons :$ tl) :$ tv) :$ tt)
+    (\((tl, tv), tt) -> ((Cn primRowCons :$ tl) :$ tv) :$ tt)
     ( \case
-        (((Con c :$ k) :$ v) :$ t) | c == primRowCons -> Just ((k, v), t)
+        (((Cn c :$ k) :$ v) :$ t) | c == primRowCons -> Just ((k, v), t)
         _ -> Nothing
     )
 

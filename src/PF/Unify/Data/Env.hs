@@ -11,7 +11,7 @@ module PF.Unify.Data.Env
     pushVar,
     currentLvl,
     pattern (:->),
-    pattern Con,
+    pattern Cn,
     pattern (:$),
   )
 where
@@ -72,8 +72,8 @@ pattern a :-> b = Free (Knd.Arr a b)
 
 infixr 9 :->
 
-pattern Con :: c -> Ty c
-pattern Con c = Free (Ty.Con c)
+pattern Cn :: c -> Ty c
+pattern Cn c = Free (Ty.Con c)
 
 pattern (:$) :: Ty c -> Ty c -> Ty c
 pattern a :$ b = Free (Ty.Ap a b)
